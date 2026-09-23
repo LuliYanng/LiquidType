@@ -26,13 +26,50 @@ https://github.com/user-attachments/assets/76607c91-3a24-44b4-87d9-a04542938314
 
 需要 **macOS 26** 才能用 Liquid Glass 效果。
 
-另外需要 Xcode Command Line Tools。
+打包好的版本只支持 **Apple Silicon**（M1 及以后的芯片），Intel 芯片的 Mac 大概率打不开，可以试试从源码编译。
+
+### 下载安装
+
+<a href="https://github.com/LuliYanng/LiquidType/releases/latest/download/LiquidType.dmg"><img src="Resources/download-macos.png" width="190" alt="下载 macOS 版"></a>
+
+下载完成后，打开 `.dmg`，把 **LiquidType** 拖进「应用程序」。
+
+> [!IMPORTANT]
+> 我没有付费的苹果开发者账号，所以 App 没做公证。第一次打开时，系统会提示「无法验证 LiquidType 是否包含恶意软件」，这是正常现象。
+>
+> 每下载一个新版本，需要放行一次。下面两种方法选一种就行。
+
+#### 推荐：终端
+
+一行命令，每次都有效：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/LiquidType.app
+```
+
+然后正常打开 LiquidType 就行。
+
+#### 或者：系统设置
+
+> [!NOTE]
+> 这个方法需要管理员账户。如果不行，就用上面的终端命令。
+
+1. 打开 LiquidType，会弹出警告，点「完成」。
+2. 打开 **系统设置 → 隐私与安全性**。
+3. 拉到页面底部，在 LiquidType 那条提示旁边点 **仍要打开**。
+4. 输入密码或用触控 ID 确认。
+
+### 从源码编译
+
+需要 Xcode Command Line Tools。
 
 ```bash
 git clone https://github.com/LuliYanng/LiquidType.git
 cd LiquidType
 bash scripts/install_app.sh
 ```
+
+### 首次启动
 
 第一次启动后，需要在：
 

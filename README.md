@@ -26,13 +26,50 @@ The Liquid Glass effect currently uses `_variant: 11` (frosted). Only tested on 
 
 You need **macOS 26** for the Liquid Glass effect.
 
-You'll also need Xcode Command Line Tools.
+The download is built for **Apple Silicon** (M1 and later). It probably won't run on Intel Macs — if you're on Intel, try building from source instead.
+
+### Download
+
+<a href="https://github.com/LuliYanng/LiquidType/releases/latest/download/LiquidType.dmg"><img src="Resources/download-macos.png" width="190" alt="Download app for macOS"></a>
+
+Once downloaded, open the `.dmg` and drag **LiquidType** into **Applications**.
+
+> [!IMPORTANT]
+> I don't have a paid Apple Developer account, so the app isn't notarized. On first launch macOS will say it *can't verify LiquidType is free of malware*. That's expected.
+>
+> You need to let it through once per downloaded version. Pick one of the two ways below.
+
+#### Recommended: Terminal
+
+One command, works every time:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/LiquidType.app
+```
+
+Then open LiquidType normally.
+
+#### Or: System Settings
+
+> [!NOTE]
+> This needs an admin account. If it doesn't work, use the Terminal command above.
+
+1. Open LiquidType — you'll get the warning. Click **Done**.
+2. Go to **System Settings → Privacy & Security**.
+3. Scroll to the bottom and click **Open Anyway** next to the LiquidType message.
+4. Confirm with your password or Touch ID.
+
+### Build from source
+
+You'll need Xcode Command Line Tools.
 
 ```bash
 git clone https://github.com/LuliYanng/LiquidType.git
 cd LiquidType
 bash scripts/install_app.sh
 ```
+
+### First launch
 
 On first launch, go to:
 
