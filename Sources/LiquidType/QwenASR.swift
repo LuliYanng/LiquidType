@@ -27,6 +27,7 @@ final class QwenASR: NSObject, URLSessionWebSocketDelegate, ASREngine {
     private var finishCompletion: ((String) -> Void)?
     private var finishTimer: DispatchWorkItem?
     private var connectedAt = Date()
+    private var region = DashScopeRegion.beijing
 
     init(apiKey: String, model: String, vocabulary: [String: Int], maxSilence: Int) {
         self.apiKey = apiKey
@@ -44,12 +45,21 @@ final class QwenASR: NSObject, URLSessionWebSocketDelegate, ASREngine {
         return (finals + [current]).joined().trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// 先认 key 在哪个地域（认过的同步返回，不耽误），再连。认的这段时间说的话照样攒在 pending 里
     func connect() {
         connectedAt = Date()
-        var req = URLRequest(url: URL(string: "wss://dashscope.aliyuncs.com/api-ws/v1/inference")!)
+        DashScope.resolve { [weak self] region in self?.open(region) }
+    }
+
+    private func open(_ region: DashScopeRegion) {
+        var req = URLRequest(url: region.inferenceSocket)
         req.setValue("bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         let task = session.webSocketTask(with: req)
+        lock.lock()
+        if closed { lock.unlock(); return }   // 还没认完就已经松键 / 取消了
+        self.region = region
         ws = task
+        lock.unlock()
         task.resume()
 
         var params: [String: Any] = [
@@ -150,12 +160,18 @@ final class QwenASR: NSObject, URLSessionWebSocketDelegate, ASREngine {
     }
 
     private func receiveLoop() {
-        ws?.receive { [weak self] result in
+        guard let task = ws else { return }
+        task.receive { [weak self] result in
             guard let self else { return }
             switch result {
             case .failure(let err):
                 self.lock.lock(); let c = self.closed; self.lock.unlock()
-                if !c { self.fail("recv: \(err.localizedDescription)") }
+                guard !c else { return }
+                // 握手就被拒：key 不是这个地域的（或失效了），忘掉记住的地域，下次重新认
+                let status = (task.response as? HTTPURLResponse)?.statusCode
+                if status == 401 || status == 403 { DashScope.forget() }
+                let http = status.map { "http \($0) " } ?? ""
+                self.fail("recv: \(http)\(self.region.host): \(err.localizedDescription)")
             case .success(let message):
                 if case .string(let text) = message { self.handle(text) }
                 self.receiveLoop()
@@ -202,6 +218,7 @@ final class QwenASR: NSObject, URLSessionWebSocketDelegate, ASREngine {
             Log.write("ASR task finished")
             complete()
         case "task-failed":
+            if (header["error_code"] as? String) == "InvalidApiKey" { DashScope.forget() }
             fail("\(header["error_code"] ?? ""): \(header["error_message"] ?? "")")
         default:
             break

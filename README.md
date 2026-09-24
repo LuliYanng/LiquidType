@@ -96,7 +96,7 @@ Click the menu bar icon → click **DashScope** → paste your API key → hit R
 | `OPENROUTER_API_KEY` | Claude Haiku cleanup, optional    |
 | `CARTESIA_API_KEY`   | Cartesia English recognition, optional |
 
-You only need `DASHSCOPE_API_KEY` to get started.
+You only need `DASHSCOPE_API_KEY` to get started. Keys from any Model Studio region work (China, International, US) — the app figures out which one on its own.
 
 ## Usage
 

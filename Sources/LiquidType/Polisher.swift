@@ -118,24 +118,27 @@ enum Polisher {
     static func warm(force: Bool = false, completion: (() -> Void)? = nil) {
         let cfg = Config.shared
         let backend = PolishModel.backend(cfg.polishModel)
-        let (url, key): (String, String)
-        switch backend {
-        case .openrouter: (url, key) = ("https://openrouter.ai/api/v1/auth/key", cfg.openrouterKey)
-        case .dashscope: (url, key) = ("https://dashscope.aliyuncs.com/compatible-mode/v1/models", cfg.apiKey)
-        }
+        let key = backend == .openrouter ? cfg.openrouterKey : cfg.apiKey
         guard !key.isEmpty else { completion?(); return }
         guard force || Date().timeIntervalSince(lastWarm) > 20 else { completion?(); return }
         lastWarm = Date()
-        var req = URLRequest(url: URL(string: url)!)
-        req.timeoutInterval = 15
-        req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        let t0 = Date()
-        URLSession.shared.dataTask(with: req) { _, resp, err in
-            let ms = Int(Date().timeIntervalSince(t0) * 1000)
-            let status = (resp as? HTTPURLResponse)?.statusCode ?? -1
-            Log.write("Warm \(backend): http \(status) in \(ms)ms \(err?.localizedDescription ?? "")")
-            completion?()
-        }.resume()
+        let send = { (url: URL) in
+            var req = URLRequest(url: url)
+            req.timeoutInterval = 15
+            req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+            let t0 = Date()
+            URLSession.shared.dataTask(with: req) { _, resp, err in
+                let ms = Int(Date().timeIntervalSince(t0) * 1000)
+                let status = (resp as? HTTPURLResponse)?.statusCode ?? -1
+                Log.write("Warm \(backend): http \(status) in \(ms)ms \(err?.localizedDescription ?? "")")
+                completion?()
+            }.resume()
+        }
+        switch backend {
+        case .openrouter: send(URL(string: "https://openrouter.ai/api/v1/auth/key")!)
+        // key 在哪个地域没认过的话这里顺便认（按键时就认好，松键润色直接用）
+        case .dashscope: DashScope.resolve { send($0.compatible("models")) }
+        }
     }
 
     /// 整段一次性润色（非流式模式）
@@ -189,7 +192,8 @@ enum Polisher {
         case .openrouter:
             url = "https://openrouter.ai/api/v1/chat/completions"; key = cfg.openrouterKey
         case .dashscope:
-            url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"; key = cfg.apiKey
+            // 地域在按键时（识别连接 / 预热）就认好了，这里直接用
+            url = DashScope.region.compatible("chat/completions").absoluteString; key = cfg.apiKey
         }
         guard !key.isEmpty else {
             Log.write("Polish skipped: no API key for \(model)")

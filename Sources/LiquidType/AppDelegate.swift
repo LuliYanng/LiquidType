@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.write("LiquidType launched (log: \(Log.path))")
+        DashScope.resolve { _ in }   // key 在哪个地域，启动时就认好，第一次按键不用等
         setupStatusItem()
         AudioCapture.requestPermission { ok in
             Log.write("Mic permission: \(ok)")
@@ -84,7 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let cfg = Config.shared
         return [
             KeySlot(id: 0, title: "DashScope", purpose: "Qwen ASR Flash · Qwen3.7-Flash. This one alone is enough", placeholder: "sk-…",
-                    get: { cfg.apiKey }, set: { cfg.apiKey = $0 },
+                    get: { cfg.apiKey }, set: { cfg.apiKey = $0; DashScope.resolve { _ in } },
                     needed: { cfg.asrChoice != "cartesia" || !PolishModel.isOpenRouter(cfg.polishModel) }),
             KeySlot(id: 1, title: "OpenRouter", purpose: "Claude Haiku 4.5", placeholder: "sk-or-…",
                     get: { cfg.openrouterKey }, set: { cfg.openrouterKey = $0; Polisher.startKeepWarm() },
