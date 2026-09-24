@@ -1,16 +1,18 @@
-# LiquidType
+<h1 align="center">LiquidType</h1>
 
-一个 **Liquid Glass** 风格的 Mac原生 AI语音输入工具。
+<p align="center">一个 <b>Liquid Glass</b> 风格的 Mac原生 AI语音输入工具。</p>
 
-[English](README.md)
+<p align="center"><a href="README.md">English</a></p>
 
-**文字模式**——说话时实时看到识别结果：
-
-https://github.com/user-attachments/assets/8fb16a30-2509-44ef-872d-cc1431573fdf
+<p align="center"><img src="Resources/hero.png" width="520" alt="LiquidType 胶囊在桌面上的效果"></p>
 
 **波形模式**——只显示波形：
 
 https://github.com/user-attachments/assets/76607c91-3a24-44b4-87d9-a04542938314
+
+**文字模式**——说话时实时看到识别结果：
+
+https://github.com/user-attachments/assets/35b473eb-5f48-4b00-8fda-0aef27471312
 
 ## 有什么不一样
 
@@ -90,11 +92,11 @@ bash scripts/install_app.sh
 
 ### API Key
 
-| Key                  | 用途                 |
-| -------------------- | ------------------ |
-| `DASHSCOPE_API_KEY`  | 千问语音识别 + 千问润色      |
-| `OPENROUTER_API_KEY` | Claude Haiku 润色，可选 |
-| `CARTESIA_API_KEY`   | Cartesia 英文识别，可选   |
+| Key                  | 用途                 | 申请地址 |
+| -------------------- | ------------------ | ------- |
+| `DASHSCOPE_API_KEY`  | 千问语音识别 + 千问润色      | [千问平台](https://platform.qianwenai.com/home/api-keys) |
+| `OPENROUTER_API_KEY` | Claude Haiku 润色，可选 | [OpenRouter](https://openrouter.ai/settings/keys) |
+| `CARTESIA_API_KEY`   | Cartesia 英文识别，可选   | [Cartesia](https://play.cartesia.ai/keys) |
 
 一般只需要 `DASHSCOPE_API_KEY` 就能跑起来。
 

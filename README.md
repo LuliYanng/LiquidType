@@ -1,16 +1,18 @@
-# LiquidType
+<h1 align="center">LiquidType</h1>
 
-A native Mac AI voice typing tool with a **Liquid Glass** style.
+<p align="center">A native Mac AI voice typing tool with a <b>Liquid Glass</b> style.</p>
 
-[中文说明](README.zh.md)
+<p align="center"><a href="README.zh.md">中文说明</a></p>
 
-**Text mode** — see the transcript as you speak:
-
-https://github.com/user-attachments/assets/8fb16a30-2509-44ef-872d-cc1431573fdf
+<p align="center"><img src="Resources/hero.png" width="520" alt="LiquidType pill over the desktop"></p>
 
 **Waveform mode** — just the bars:
 
 https://github.com/user-attachments/assets/76607c91-3a24-44b4-87d9-a04542938314
+
+**Text mode** — see the transcript as you speak:
+
+https://github.com/user-attachments/assets/35b473eb-5f48-4b00-8fda-0aef27471312
 
 ## What's different
 
@@ -90,13 +92,13 @@ Click the menu bar icon → click **DashScope** → paste your API key → hit R
 
 ### API Keys
 
-| Key                  | What it's for                    |
-| -------------------- | -------------------------------- |
-| `DASHSCOPE_API_KEY`  | Qwen speech recognition + cleanup |
-| `OPENROUTER_API_KEY` | Claude Haiku cleanup, optional    |
-| `CARTESIA_API_KEY`   | Cartesia English recognition, optional |
+| Key                  | What it's for                          | Get one |
+| -------------------- | -------------------------------------- | ------- |
+| `DASHSCOPE_API_KEY`  | Qwen speech recognition + cleanup      | [Qwen platform](https://platform.qianwenai.com/home/api-keys) |
+| `OPENROUTER_API_KEY` | Claude Haiku cleanup, optional         | [OpenRouter](https://openrouter.ai/settings/keys) |
+| `CARTESIA_API_KEY`   | Cartesia English recognition, optional | [Cartesia](https://play.cartesia.ai/keys) |
 
-You only need `DASHSCOPE_API_KEY` to get started.
+You only need `DASHSCOPE_API_KEY` to get started. The app talks to the China-region DashScope endpoint, so a key from the international Model Studio (Singapore) won't work.
 
 ## Usage
 
