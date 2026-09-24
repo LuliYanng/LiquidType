@@ -98,7 +98,7 @@ bash scripts/install_app.sh
 | `OPENROUTER_API_KEY` | Claude Haiku 润色，可选 | [OpenRouter](https://openrouter.ai/settings/keys) |
 | `CARTESIA_API_KEY`   | Cartesia 英文识别，可选   | [Cartesia](https://play.cartesia.ai/keys) |
 
-一般只需要 `DASHSCOPE_API_KEY` 就能跑起来。
+一般只需要 `DASHSCOPE_API_KEY` 就能跑起来。百炼国内站、国际站、美国站的 key 都能用，会自动识别是哪个站的。
 
 ## 用法
 

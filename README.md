@@ -98,7 +98,7 @@ Click the menu bar icon → click **DashScope** → paste your API key → hit R
 | `OPENROUTER_API_KEY` | Claude Haiku cleanup, optional         | [OpenRouter](https://openrouter.ai/settings/keys) |
 | `CARTESIA_API_KEY`   | Cartesia English recognition, optional | [Cartesia](https://play.cartesia.ai/keys) |
 
-You only need `DASHSCOPE_API_KEY` to get started. The app talks to the China-region DashScope endpoint, so a key from the international Model Studio (Singapore) won't work.
+You only need `DASHSCOPE_API_KEY` to get started. Keys from any Model Studio region work (China, International, US) — the app figures out which one on its own.
 
 ## Usage
 
