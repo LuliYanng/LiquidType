@@ -4,7 +4,7 @@
 
 <p align="center"><a href="README.zh.md">中文说明</a></p>
 
-<p align="center"><img src="Resources/hero.png" width="520" alt="LiquidType pill over the desktop"></p>
+<p align="center"><img src="Resources/hero.png" width="495" alt="LiquidType pill over the desktop"></p>
 
 **Waveform mode** — just the bars:
 

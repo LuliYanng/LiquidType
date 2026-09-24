@@ -4,7 +4,7 @@
 
 <p align="center"><a href="README.md">English</a></p>
 
-<p align="center"><img src="Resources/hero.png" width="520" alt="LiquidType 胶囊在桌面上的效果"></p>
+<p align="center"><img src="Resources/hero.png" width="495" alt="LiquidType 胶囊在桌面上的效果"></p>
 
 **波形模式**——只显示波形：
 
