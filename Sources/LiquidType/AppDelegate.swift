@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AudioCapture.requestPermission { ok in
             Log.write("Mic permission: \(ok)")
             if !ok { self.flash(.error, HUDCopy.micDenied, 4) }
+            if ok { self.audio.warmUp() }
         }
         let trusted = HotkeyMonitor.ensureAccessibilityPermission(prompt: true)
         Log.write("Accessibility trusted: \(trusted)")

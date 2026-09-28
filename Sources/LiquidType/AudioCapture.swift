@@ -41,6 +41,22 @@ final class AudioCapture {
         }
     }
 
+    /// A process's first AVAudioEngine() can stall for over two seconds before it even reaches the hardware
+    /// (about every other launch, never after; the system log shows nothing happening in between). The first
+    /// dictation then loses its opening words. Pay it at launch instead, short of starting the mic, so the
+    /// recording indicator doesn't light up
+    func warmUp() {
+        queue.async {
+            guard !self.active else { return }
+            let t0 = Date()
+            let engine = AVAudioEngine()
+            _ = engine.inputNode.inputFormat(forBus: 0)
+            Log.write("Mic warm-up: engine ready in \(Self.ms(t0, Date()))ms")
+        }
+    }
+
+    private static func ms(_ a: Date, _ b: Date) -> Int { Int(b.timeIntervalSince(a) * 1000) }
+
     /// onLevel / onError 主线程；onChunk 音频线程。onLevel 给原始 RMS（0..1），约 20ms 一次
     func start(
         onLevel: @escaping (Float) -> Void,
@@ -78,6 +94,7 @@ final class AudioCapture {
 
     /// 建一台新引擎、装 tap、跑起来。失败返回 false（已清干净，可以直接再调一次）。
     private func bringUpEngine() -> Bool {
+        let tNew = Date()
         teardownEngine()
         converter = nil
         tapFormat = nil
@@ -113,8 +130,14 @@ final class AudioCapture {
             if let chunk = self.resample(mono) { self.onChunk?(chunk) }
         }
         do {
+            let t0 = Date()
             engine.prepare()
+            let t1 = Date()
             try engine.start()
+            let t2 = Date()
+            if Self.ms(tNew, t2) > 300 {
+                Log.write("Mic slow to start: engine \(Self.ms(tNew, t0))ms, prepare \(Self.ms(t0, t1))ms, start \(Self.ms(t1, t2))ms")
+            }
             return true
         } catch {
             Log.write("AudioEngine start failed: \(error)")
