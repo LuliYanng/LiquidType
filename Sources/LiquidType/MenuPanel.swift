@@ -130,7 +130,15 @@ struct MenuPanelView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text("LiquidType").font(.system(size: 15, weight: .semibold))
+            HStack(alignment: .firstTextBaseline) {
+                Text("LiquidType").font(.system(size: 15, weight: .semibold))
+                Spacer(minLength: 6)
+                // Which build this is, for the ⌥ panel only
+                if model.devMode {
+                    Text(AppVersion.summary).font(.system(size: 10.5)).foregroundStyle(.tertiary)
+                        .lineLimit(1).truncationMode(.middle)
+                }
+            }
             Text(Config.shared.toggleMode
                  ? "Tap fn, speak, tap again"
                  : "Hold fn to talk, release to type")

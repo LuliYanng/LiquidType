@@ -11,6 +11,12 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/LiquidType "$APP/Contents/MacOS/LiquidType"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+# Every build carries the same version number, so also stamp the branch and commit it came from
+# (shown in the log and the ⌥ panel): a glance tells which build is installed.
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
+COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "?")
+git diff --quiet HEAD 2>/dev/null || COMMIT="$COMMIT+dirty"
+/usr/libexec/PlistBuddy -c "Add :LTBuild string $BRANCH @ $COMMIT" "$APP/Contents/Info.plist"
 # SwiftPM resource bundle (site icons): Bundle.module looks for it under the app's Resources/
 cp -R .build/release/LiquidType_LiquidType.bundle "$APP/Contents/Resources/"
 

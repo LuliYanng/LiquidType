@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let menuPanel = MenuPanelController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        Log.write("LiquidType launched (log: \(Log.path))")
+        Log.write("LiquidType \(AppVersion.summary) launched (log: \(Log.path))")
         DashScope.resolve { _ in }   // key 在哪个地域，启动时就认好，第一次按键不用等
         setupStatusItem()
         AudioCapture.requestPermission { ok in

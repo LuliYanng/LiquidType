@@ -152,6 +152,16 @@ final class Config {
     }
 }
 
+/// "0.1.1 (main @ 732ac9f)": the version plus the branch and commit scripts/build_app.sh stamped in
+enum AppVersion {
+    static var summary: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? "unbundled"
+        guard let build = info["LTBuild"] as? String else { return version }
+        return "\(version) (\(build))"
+    }
+}
+
 /// 润色 LLM 清单与路由：含 "/" 走 OpenRouter，其余走 DashScope 兼容接口。
 struct PolishModel {
     enum Backend { case openrouter, dashscope }
