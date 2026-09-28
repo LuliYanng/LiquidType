@@ -97,6 +97,7 @@ bash scripts/install_app.sh
 | `DASHSCOPE_API_KEY`  | 千问语音识别 + 千问润色      | [千问平台](https://platform.qianwenai.com/home/api-keys) |
 | `OPENROUTER_API_KEY` | Claude Haiku 润色，可选 | [OpenRouter](https://openrouter.ai/settings/keys) |
 | `CARTESIA_API_KEY`   | Cartesia 英文识别，可选   | [Cartesia](https://play.cartesia.ai/keys) |
+| `TYPESAFE_API_KEY`   | Jev 快速直出（beta），可选 | [TypeSafe](https://console.typesafe.ai/keys) |
 
 一般只需要 `DASHSCOPE_API_KEY` 就能跑起来。百炼国内站、国际站、美国站的 key 都能用，会自动识别是哪个站的。
 
@@ -114,6 +115,15 @@ bash scripts/install_app.sh
 语音识别经常把人名和专有名词识别错。把它们加到面板的 **Dictionary** 里，下次就能识别对。也可以打开 **Learn from my edits**：LiquidType 输入之后，你手动改掉了识别错的名字，改对的词会自动加进词典。学到新词时会弹出一个小提示，点 ↺ 就能撤销，以后也不会再学这个词。
 
 自动学习默认关闭。打开后，它会读取你刚输入的那个输入框，把你改过的那一段发给润色用的 LLM。只要 macOS 能读到输入框就能用（比如 Chrome、Claude 桌面版），像微信这类自己绘制输入框的 App 读不到。
+
+### Jev 快速直出（beta）
+
+很多短句本来就不需要润色，却还是要等一两秒。在面板里打开 **Jev fast path**，再在 **Jev** 那一行填上 [TypeSafe](https://console.typesafe.ai/keys) 的 key，LiquidType 会在润色的同时问 Jev：这段识别结果能不能直接用？
+
+* Jev 判断没问题 → 立刻输入原文（Jev 大约 0.3 秒就能给出判断）。
+* Jev 判断需要润色，或者没抢在润色前面回来 → 照常用润色结果，不会比原来慢。
+
+在邮件和终端里不会启用，因为那里的润色要做原文达不到的排版。识别出来的文字也会发给 TypeSafe。目前还是 beta：偶尔会有小的识别错误（比如漏了一个词）没被修正就直接输入了。随时可以在面板里关掉。判断阈值默认 0.6，可以在 `~/.liquidtype.env` 里设 `VT_JEV_THRESHOLD` 调整。
 
 ## 为什么做这个
 

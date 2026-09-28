@@ -20,7 +20,7 @@ enum WebContext {
     ]
 
     private static let chat = AppStyle(label: "即时消息", hint: "这是即时通讯消息：保持口语，讲到不同的事可以换行，但不要空行，句尾不加句号。")
-    private static let mail = AppStyle(label: "邮件", hint: "这是邮件正文：这是唯一允许适度书面化的场景——完整句子、礼貌，按邮件格式排版：称呼单独一行，然后空一行；正文按意思分段，段落之间空一行；列举用编号；结尾问候前空一行，问候和署名各单独一行。", blankLines: true)
+    private static let mail = AppStyle(label: "邮件", hint: "这是邮件正文：这是唯一允许适度书面化的场景——完整句子、礼貌，按邮件格式排版：称呼单独一行，然后空一行；正文按意思分段，段落之间空一行；列举用编号；结尾问候前空一行，问候和署名各单独一行。", blankLines: true, fastPath: false)
     private static let ai = AppStyle(label: "AI 对话", hint: "这是对 AI 助手说的话：保持用户的口语原样，保留所有细节、例子和意图，不精简、不改写成指令体；有多个要求或步骤时分行编号。")
     private static let notes = AppStyle(label: "文档", hint: "这是在线文档/笔记：可以稍微书面一点、条理清楚，但用词还是用户自己的。")
     private static let code = AppStyle(label: "代码", hint: "这是代码托管/工程协作平台：技术术语、变量名、文件名、英文原样保留，表达简洁准确。")

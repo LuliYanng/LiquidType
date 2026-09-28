@@ -94,6 +94,7 @@ struct MenuPanelView: View {
     @State private var newWord = ""
     @State private var chipsHeight: CGFloat = 0
     private static let chipsMaxHeight: CGFloat = 132
+    @State private var jev = false
     @FocusState private var focusedKey: Int?
 
     var body: some View {
@@ -132,6 +133,24 @@ struct MenuPanelView: View {
                         option(m.title, selected: m.id == llm) { pickLLM(m.id) }
                     }
                 }
+                // On/off lives here with the other settings; its key sits with the other keys (like LLM → OpenRouter)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text("Jev fast path").font(.system(size: 13))
+                        Text("BETA").font(.system(size: 8.5, weight: .semibold)).foregroundStyle(.secondary)
+                            .padding(.horizontal, 4).padding(.vertical, 1.5)
+                            .background(Capsule().fill(Color.primary.opacity(0.08)))
+                        Spacer()
+                        Toggle("", isOn: Binding(get: { jev }, set: { setJev($0) }))
+                            .toggleStyle(.switch).controlSize(.mini).labelsHidden()
+                    }
+                    .frame(minHeight: 28)
+                    // The per-app exceptions (AppStyle.fastPath) shouldn't be a black box
+                    Text("Not used in email or Terminal, where cleanup does the formatting")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 8).padding(.bottom, 4)
                 disclosure("dict", label: "Dictionary", value: dictionaryValue,
                            valueColor: model.newWords.isEmpty ? .secondary : .accentColor) {
                     dictionary
@@ -318,6 +337,7 @@ struct MenuPanelView: View {
     private func reset() {
         asr = ASRModel.find(Config.shared.asrChoice).id
         llm = Config.shared.polishModel
+        jev = Config.shared.jevEnabled
         expanded = nil
         // 非填不可的那把还空着：直接把它摊开，光标放进去
         if let s = model.slots.first(where: { $0.needed() && $0.get().isEmpty }) { toggle("key\(s.id)") }
@@ -342,6 +362,14 @@ struct MenuPanelView: View {
         Config.shared.polishModel = id
         llm = id
         Polisher.startKeepWarm()
+        afterPick()
+    }
+
+    private func setJev(_ on: Bool) {
+        Config.shared.jevEnabled = on
+        jev = on
+        Log.write("Jev fast path \(on ? "on" : "off")")
+        JevGate.startKeepWarm()
         afterPick()
     }
 

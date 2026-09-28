@@ -97,6 +97,7 @@ Click the menu bar icon → click **DashScope** → paste your API key → hit R
 | `DASHSCOPE_API_KEY`  | Qwen speech recognition + cleanup      | [Qwen platform](https://platform.qianwenai.com/home/api-keys) |
 | `OPENROUTER_API_KEY` | Claude Haiku cleanup, optional         | [OpenRouter](https://openrouter.ai/settings/keys) |
 | `CARTESIA_API_KEY`   | Cartesia English recognition, optional | [Cartesia](https://play.cartesia.ai/keys) |
+| `TYPESAFE_API_KEY`   | Jev fast path (beta), optional         | [TypeSafe](https://console.typesafe.ai/keys) |
 
 You only need `DASHSCOPE_API_KEY` to get started. Keys from any Model Studio region work (China, International, US) — the app figures out which one on its own.
 
@@ -114,6 +115,15 @@ Pretty simple:
 Speech recognition often gets names and jargon wrong. Add them under **Dictionary** in the panel and they'll come out right next time. Or turn on **Learn from my edits**: when you fix a misheard name by hand after LiquidType types it, the corrected word is added for you. A small notice shows what it learned; click ↺ on it to undo, and that word won't be learned again.
 
 Learning is off by default. It reads back the text field you typed into and sends the passage you edited to your cleanup LLM. It works where macOS can read the field (Chrome and the Claude app, for example), but not in apps that draw their own, like WeChat.
+
+### Jev fast path (beta)
+
+Short, clean sentences don't really need cleanup, but they still wait a second or two for it. Turn on **Jev fast path** in the panel, add a [TypeSafe](https://console.typesafe.ai/keys) key under **Jev**, and LiquidType asks Jev whether the transcript can be typed as-is, at the same time as the cleanup runs:
+
+* Jev says it's clean → the text is typed right away (Jev answers in about 0.3s).
+* Jev says it needs work, or doesn't answer first → cleanup is used as usual, so nothing gets slower.
+
+It stays off in email and terminal apps, where cleanup does formatting the raw text can't match. Your transcript is also sent to TypeSafe. It's a beta: now and then a small recognition slip (like a missing word) gets typed without being fixed. Switch it off in the panel any time. The cutoff is 0.6; set `VT_JEV_THRESHOLD` in `~/.liquidtype.env` to change it.
 
 ## Why I made this
 

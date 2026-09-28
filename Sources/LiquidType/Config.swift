@@ -123,6 +123,25 @@ final class Config {
         set { d.set(newValue, forKey: "openrouterApiKey") }
     }
 
+    /// Beta: Jev fast path switch in the panel. A "can this transcript go out as-is?" check runs alongside
+    /// polishing (see JevGate). Until the user flips it, it follows whether a key is set.
+    var jevEnabled: Bool {
+        get { d.object(forKey: "jevEnabled") == nil ? !jevKey.isEmpty : d.bool(forKey: "jevEnabled") }
+        set { d.set(newValue, forKey: "jevEnabled") }
+    }
+
+    /// TypeSafe key for the Jev fast path
+    var jevKey: String {
+        get {
+            if let v = d.string(forKey: "typesafeApiKey"), !v.isEmpty { return v }
+            return env("TYPESAFE_API_KEY") ?? ""
+        }
+        set { d.set(newValue, forKey: "typesafeApiKey") }
+    }
+
+    /// Jev score at or above which the raw transcript is typed without waiting for polish
+    var jevThreshold: Double { Double(env("VT_JEV_THRESHOLD") ?? "") ?? 0.6 }
+
     /// 润色 LLM。菜单里选的优先，其次 ~/.liquidtype.env 的 VT_POLISH_MODEL；认不出的一律回默认。
     /// 默认是 Claude Haiku 4.5（最忠实原话）；没填 OpenRouter key 时退到千问 3.7 Flash，只填 DashScope 一把 key 也能用
     var polishModel: String {

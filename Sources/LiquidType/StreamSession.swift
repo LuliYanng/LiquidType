@@ -41,7 +41,27 @@ final class StreamSession {
         let raw = rawSentences.joined()
         guard !raw.isEmpty else { onDone?(""); return }
         if polish {
+            // Jev fast path (beta), a race: whichever settles first wins. A confident Jev "clean" types the raw
+            // text right away; anything else waits for polish, so the worst case is today's latency.
+            // A losing polish still runs to completion and is logged, for recalibrating the threshold.
+            var settled = false
+            let t0 = Date()
+            if JevGate.enabled && style.fastPath {
+                let threshold = Config.shared.jevThreshold
+                JevGate.check(raw) { [weak self] score in
+                    let ms = Int(Date().timeIntervalSince(t0) * 1000)
+                    guard let score else { return }
+                    guard !settled else { Log.write("Jev \(score) in \(ms)ms, after polish"); return }
+                    guard score >= threshold else { Log.write("Jev \(score) in \(ms)ms → polish"); return }
+                    Log.write("Jev \(score) in \(ms)ms → skip polish")
+                    settled = true
+                    guard let self, !self.aborted else { return }
+                    self.inject(raw)
+                }
+            }
             Polisher.polish(raw, style: style, appName: appName) { [weak self] text, _ in
+                guard !settled else { Log.write("Polish discarded [\(text)]"); return }
+                settled = true
                 guard let self, !self.aborted else { return }
                 self.inject(text)
             }

@@ -66,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hotkey.start()
         Polisher.startKeepWarm()
+        JevGate.startKeepWarm()
     }
 
     /// 退出时兜底：别把用户的外放留在静音状态
@@ -105,6 +106,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             KeySlot(id: 2, title: "Cartesia", purpose: "English speech, ink-2", placeholder: "sk_car_…",
                     get: { cfg.cartesiaKey }, set: { cfg.cartesiaKey = $0 },
                     needed: { cfg.asrChoice == "cartesia" }),
+            KeySlot(id: 3, title: "Jev", purpose: "Jev fast path (beta)", placeholder: "apikey_…",
+                    get: { cfg.jevKey }, set: { cfg.jevKey = $0; JevGate.startKeepWarm() },
+                    needed: { cfg.jevEnabled }),
         ]
     }
 
@@ -139,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state = .listening
         pressedAt = Date()
         partial = ""
-        if Config.shared.polishEnabled { Polisher.warm() }
+        if Config.shared.polishEnabled { Polisher.warm(); JevGate.warm(force: false) }
         let cfg = Config.shared
         let target = NSWorkspace.shared.frontmostApplication
         var style = AppStyle.forApp(target)
