@@ -23,9 +23,45 @@ final class PanelModel: ObservableObject {
     var onOpenLog: () -> Void = {}
     var onClose: () -> Void = {}
 
+    // Dictionary: learned / added words newest first, the env file's words, and which ones are new
+    @Published var words: [String] = []
+    @Published var envWords: [String] = []
+    @Published var newWords: Set<String> = []
+    @Published var learnOn = false
+
     func reload() {
         drafts = Dictionary(uniqueKeysWithValues: slots.map { ($0.id, $0.get()) })
+        reloadWords()
+        newWords = Set(Config.shared.newHotwords)
         shownCount += 1
+    }
+
+    private func reloadWords() {
+        let cfg = Config.shared
+        words = cfg.learnedHotwords.reversed()
+        envWords = cfg.envHotwords.keys.sorted()
+        learnOn = cfg.learnHotwords
+    }
+
+    func removeWord(_ word: String) {
+        Config.shared.removeLearnedHotword(word)
+        Log.write("Dictionary: removed [\(word)]")
+        reloadWords()
+    }
+
+    func addWord(_ raw: String) {
+        let word = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !word.isEmpty else { return }
+        let added = Config.shared.addLearnedHotwords([word], byHand: true)
+        Log.write("Dictionary: added [\(word)]\(added.isEmpty ? " (already there)" : "")")
+        reloadWords()
+    }
+
+    func setLearn(_ on: Bool) {
+        Config.shared.learnHotwords = on
+        Log.write("Dictionary: learn from edits \(on ? "on" : "off")")
+        if !on { HotwordLearner.shared.turnedOff() }
+        learnOn = on
     }
 
     func saveKeys() {
@@ -55,6 +91,9 @@ struct MenuPanelView: View {
     @State private var expanded: String?
     @State private var asr = ""
     @State private var llm = ""
+    @State private var newWord = ""
+    @State private var chipsHeight: CGFloat = 0
+    private static let chipsMaxHeight: CGFloat = 132
     @FocusState private var focusedKey: Int?
 
     var body: some View {
@@ -92,6 +131,10 @@ struct MenuPanelView: View {
                     ForEach(PolishModel.presets, id: \.id) { m in
                         option(m.title, selected: m.id == llm) { pickLLM(m.id) }
                     }
+                }
+                disclosure("dict", label: "Dictionary", value: dictionaryValue,
+                           valueColor: model.newWords.isEmpty ? .secondary : .accentColor) {
+                    dictionary
                 }
             }
             divider
@@ -210,6 +253,66 @@ struct MenuPanelView: View {
         }
     }
 
+    /// Collapsed: how many words, or how many are new since it was last opened
+    private var dictionaryValue: String {
+        let fresh = model.words.filter(model.newWords.contains).count
+        if fresh > 0 { return "\(fresh) new" }
+        let n = model.words.count + model.envWords.count
+        if n == 0 { return model.learnOn ? "Empty" : "Off" }
+        return n == 1 ? "1 word" : "\(n) words"
+    }
+
+    /// Words as chips (new ones tinted, the env file's grayed and fixed), a field to add one, and the learning switch
+    private var dictionary: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if model.words.isEmpty && model.envWords.isEmpty {
+                Text("Names and terms you add or fix by hand show up here")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            } else {
+                ScrollView(.vertical) {
+                    FlowLayout(spacing: 5) {
+                        ForEach(model.words.filter(model.newWords.contains) + model.words.filter { !model.newWords.contains($0) },
+                                id: \.self) { w in
+                            WordChip(word: w, tint: model.newWords.contains(w) ? .fresh : .normal) { model.removeWord(w) }
+                        }
+                        ForEach(model.envWords, id: \.self) { w in WordChip(word: w, tint: .fixed, onRemove: nil) }
+                    }
+                    .background(GeometryReader { g in Color.clear.preference(key: HeightKey.self, value: g.size.height) })
+                }
+                .scrollIndicators(.automatic)
+                .frame(height: min(max(chipsHeight, 20), Self.chipsMaxHeight))
+                // More below: fade the bottom edge instead of cutting a row in half
+                .mask(LinearGradient(stops: [.init(color: .black, location: 0),
+                                             .init(color: .black, location: chipsHeight > Self.chipsMaxHeight ? 0.8 : 1),
+                                             .init(color: chipsHeight > Self.chipsMaxHeight ? .clear : .black, location: 1)],
+                                     startPoint: .top, endPoint: .bottom))
+                .onPreferenceChange(HeightKey.self) { chipsHeight = $0 }
+            }
+            TextField("Add a word", text: $newWord)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .padding(.horizontal, 7).frame(height: 24)
+                .background(RoundedRectangle(cornerRadius: 5).fill(Color(nsColor: .textBackgroundColor).opacity(0.7)))
+                .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.primary.opacity(0.12)))
+                .onSubmit { model.addWord(newWord); newWord = "" }
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text("Learn from my edits").font(.system(size: 12.5))
+                    Spacer()
+                    Toggle("", isOn: Binding(get: { model.learnOn }, set: { model.setLearn($0) }))
+                        .toggleStyle(.switch).controlSize(.mini).labelsHidden()
+                }
+                // Learning runs on the same model as polishing: name it, and say where it's picked
+                (Text("Reads back the text you fix after I type. ")
+                 + Text(PolishModel.presets.first { $0.id == llm }?.title ?? "The LLM").fontWeight(.medium)
+                 + Text(", set under LLM above, picks out the names you corrected"))
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 8).padding(.top, 2).padding(.bottom, 4)
+    }
+
     // MARK: 动作
 
     private func reset() {
@@ -223,6 +326,8 @@ struct MenuPanelView: View {
     private func toggle(_ id: String) {
         model.saveKeys()
         expanded = expanded == id ? nil : id
+        // Seen now: they stay tinted while the panel is open, not the next time
+        if expanded == "dict" { Config.shared.newHotwords = [] }
         let key = expanded.flatMap { $0.hasPrefix("key") ? Int($0.dropFirst(3)) : nil }
         DispatchQueue.main.async { focusedKey = key }
     }
@@ -283,6 +388,79 @@ private struct PanelRow<Content: View>: View {
         case .plain: return .clear
         }
     }
+}
+
+/// One dictionary word. New ones are tinted; the env file's are gray and can't be removed from here
+private struct WordChip: View {
+    enum Tint { case normal, fresh, fixed }
+    let word: String
+    let tint: Tint
+    let onRemove: (() -> Void)?
+    @State private var hovered = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(word).font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
+            if let onRemove {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark").font(.system(size: 7.5, weight: .bold))
+                        .opacity(hovered ? 0.8 : 0.35)
+                        .frame(width: 10, height: 14).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove \(word)")
+            }
+        }
+        .foregroundStyle(tint == .fixed ? Color.secondary : tint == .fresh ? Color.accentColor : Color.primary)
+        .padding(.leading, 7).padding(.trailing, onRemove == nil ? 7 : 4)
+        .frame(maxWidth: 220).frame(height: 20)
+        .background(RoundedRectangle(cornerRadius: 5).fill(fill))
+        .help(tint == .fixed ? "From ~/.liquidtype.env" : "")
+        .onHover { hovered = $0 }
+    }
+
+    private var fill: Color {
+        switch tint {
+        case .fresh: return Color.accentColor.opacity(0.16)
+        case .fixed: return Color.primary.opacity(0.04)
+        case .normal: return Color.primary.opacity(hovered ? 0.11 : 0.07)
+        }
+    }
+}
+
+/// Chips left to right, wrapping onto the next line
+private struct FlowLayout: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(subviews, width: proposal.width ?? .infinity)
+        return CGSize(width: proposal.width ?? rows.width, height: rows.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (v, p) in zip(subviews, arrange(subviews, width: bounds.width).origins) {
+            v.place(at: CGPoint(x: bounds.minX + p.x, y: bounds.minY + p.y), proposal: .unspecified)
+        }
+    }
+
+    private func arrange(_ subviews: Subviews, width: CGFloat) -> (origins: [CGPoint], width: CGFloat, height: CGFloat) {
+        var origins: [CGPoint] = []
+        var x: CGFloat = 0, y: CGFloat = 0, rowH: CGFloat = 0, widest: CGFloat = 0
+        for v in subviews {
+            let s = v.sizeThatFits(.unspecified)
+            if x > 0, x + s.width > width { x = 0; y += rowH + spacing; rowH = 0 }
+            origins.append(CGPoint(x: x, y: y))
+            x += s.width + spacing
+            rowH = max(rowH, s.height)
+            widest = max(widest, x - spacing)
+        }
+        return (origins, widest, y + rowH)
+    }
+}
+
+private struct HeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
 /// 二选一的小分段：浅色槽里一颗白色胶囊滑来滑去（控制中心那种），不用系统那个蓝色的 segmented

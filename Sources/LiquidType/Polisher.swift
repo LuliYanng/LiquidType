@@ -182,7 +182,9 @@ enum Polisher {
         return out
     }
 
-    private static func request(system: String, user: String, fallback: String, allowBlankLines: Bool = false, timeout: TimeInterval = 12, completion: @escaping (String, Bool) -> Void) {
+    /// One chat completion with the selected polish model. `label` only prefixes the log lines
+    static func request(system: String, user: String, fallback: String, allowBlankLines: Bool = false, timeout: TimeInterval = 12,
+                        label: String = "Polish", completion: @escaping (String, Bool) -> Void) {
         let cfg = Config.shared
         let model = cfg.polishModel
         let backend = PolishModel.backend(model)
@@ -196,7 +198,7 @@ enum Polisher {
             url = DashScope.region.compatible("chat/completions").absoluteString; key = cfg.apiKey
         }
         guard !key.isEmpty else {
-            Log.write("Polish skipped: no API key for \(model)")
+            Log.write("\(label) skipped: no API key for \(model)")
             DispatchQueue.main.async { completion(fallback, false) }
             return
         }
@@ -245,12 +247,12 @@ enum Polisher {
                 provider = (obj["provider"] as? String) ?? ""
             }
             if let out, !out.isEmpty {
-                Log.write("Polish ok in \(ms)ms model=\(model) \(provider)")
+                Log.write("\(label) ok in \(ms)ms model=\(model) \(provider)")
                 DispatchQueue.main.async { completion(out, true) }
             } else {
                 let status = (resp as? HTTPURLResponse)?.statusCode ?? -1
                 let bodyText = data.flatMap { String(data: $0, encoding: .utf8) }?.prefix(200) ?? ""
-                Log.write("Polish failed (\(ms)ms, http \(status), model=\(model)): \(err?.localizedDescription ?? "") \(bodyText)")
+                Log.write("\(label) failed (\(ms)ms, http \(status), model=\(model)): \(err?.localizedDescription ?? "") \(bodyText)")
                 DispatchQueue.main.async { completion(fallback, false) }
             }
         }.resume()

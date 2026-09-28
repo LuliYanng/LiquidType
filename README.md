@@ -109,6 +109,12 @@ Pretty simple:
 * Press `esc` while recording to cancel.
 * Click the menu bar icon → **Panel** to switch between text / waveform, change the speech model or cleanup LLM, and manage API keys.
 
+### Dictionary
+
+Speech recognition often gets names and jargon wrong. Add them under **Dictionary** in the panel and they'll come out right next time. Or turn on **Learn from my edits**: when you fix a misheard name by hand after LiquidType types it, the corrected word is added for you. A small notice shows what it learned; click ↺ on it to undo, and that word won't be learned again.
+
+Learning is off by default. It reads back the text field you typed into and sends the passage you edited to your cleanup LLM. It works where macOS can read the field (Chrome and the Claude app, for example), but not in apps that draw their own, like WeChat.
+
 ## Why I made this
 
 I really like the Liquid Glass look on macOS 26, but most voice typing tools don't look that great. I just wanted a voice input tool on macOS that actually looks good.

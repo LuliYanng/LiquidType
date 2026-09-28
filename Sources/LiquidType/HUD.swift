@@ -16,13 +16,26 @@ final class HUD {
     private let marquee = MarqueeLabel()
     private let wave = WaveformView()
     private let thinking = ThinkingView()
-    private enum Showing { case text, wave, thinking }
+    private let learnedView = LearnedNoticeView()
+    private let undoButton = RingButton()
+    private let hoverWatcher = HoverWatcher()
+    private var learned: [String]?
+    /// Whether the notice's Undo really removes the words (off for previews and the tuning panel's samples)
+    private var learnedUndoable = false
+    private var undone = false
+    private var fading = false                 // the 0.2 s fade-out is running
+    /// The words the user took back with the notice's Undo
+    var onUndoLearned: (([String]) -> Void)?
+    private enum Showing { case text, wave, thinking, learned }
     private var showing = Showing.text
     private var hideWork: DispatchWorkItem?
     private var pillW: CGFloat = 0             // 胶囊此刻的宽度（变宽 / 收回的动画中间值）
     private var targetW: CGFloat = 0           // 要去的宽度；里面的图标 / 文字按它排，玻璃展开时把它们露出来
+    private var pillH: CGFloat = 0             // height likewise: only the learned-words notice grows it
+    private var targetH: CGFloat = 0
     private var widthTween: Timer?
     private static let maxPillWidth: CGFloat = 420
+    private static let maxPillHeight: CGFloat = 150
     private var thinkingWord = ""              // 这一次松键抽到的状态词；思考期间会 redraw 好几回，不能每回重抽
     private var hideGen = 0                    // 每次 show / hide 加一：淡出到一半又被叫出来时，旧的收尾就不算数了
     private var sub: AnyCancellable?
@@ -52,6 +65,12 @@ final class HUD {
         content.addSubview(marquee)
         content.addSubview(wave)
         content.addSubview(thinking)
+        content.addSubview(learnedView)
+        hoverWatcher.autoresizingMask = [.width, .height]
+        hoverWatcher.onChange = { [weak self] inside in self?.pointerOnPill(inside) }
+        content.addSubview(hoverWatcher)
+        undoButton.onClick = { [weak self] in self?.undoLearned() }
+        content.addSubview(undoButton)
 
         if #available(macOS 26, *) {
             let g = GlassPillView()
@@ -182,9 +201,17 @@ final class HUD {
         wave.levelSource = { WaveformView.fakeSpeech(CACurrentMediaTime()) }
     }
 
-    func show(_ mode: Mode, written: String = "", pending: String = "", partial: String = "", message: String? = nil) {
+    func show(_ mode: Mode, written: String = "", pending: String = "", partial: String = "", message: String? = nil,
+              learned: [String]? = nil) {
         hideWork?.cancel()
         hideGen += 1
+        fading = false
+        self.learned = learned
+        learnedUndoable = false
+        undone = false
+        if learned != nil { undoButton.reset(dark: tuning.learnedGlass.textDark) }
+        // Only the learned notice takes the mouse (its Undo); anything else lets clicks through as always
+        panel.ignoresMouseEvents = learned == nil
         if panel.alphaValue < 1 {              // 正在淡出：从当前透明度直接淡回来，不闪
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.1
@@ -203,6 +230,39 @@ final class HUD {
         redraw()
         place(force: false)
         orderFront()
+    }
+
+    /// Hotwords learned from the user's edits. It stays long enough to reach its Undo (longer with more words)
+    /// and holds still while the pointer rests on it. `undoable` = Undo really takes the words back out
+    func showLearned(_ words: [String], undoable: Bool = false) {
+        guard !words.isEmpty else { return }
+        show(.info, learned: words)
+        learnedUndoable = undoable
+        hide(after: learnedHold)
+        undoButton.countDown(duration: learnedHold)
+    }
+
+    private var learnedHold: TimeInterval { min(6, 4 + 0.4 * Double((learned?.count ?? 1) - 1)) }
+
+    private func pointerOnPill(_ inside: Bool) {
+        guard showing == .learned, panel.isVisible, !undone, !fading else { return }
+        if inside {
+            hideWork?.cancel()
+            undoButton.freeze()
+        } else {
+            hide(after: 1.5)
+            undoButton.countDown(duration: 1.5)
+        }
+    }
+
+    private func undoLearned() {
+        guard showing == .learned, !undone, let words = learned else { return }
+        undone = true
+        undoButton.freeze()
+        if learnedUndoable { onUndoLearned?(words) }
+        // The notice turns into "Got it, won't learn …": the button goes and the pill reshapes to one line
+        redraw()
+        hide(after: 1.6)
     }
 
     /// 麦克风原始 RMS → 柱子高度。门限以下算静音；满格跟着这次说话最近的峰值走（快跟、每秒回落 6 dB）。
@@ -242,7 +302,7 @@ final class HUD {
         // 提示 / 报错永远用文字；松开热键之后两种显示都换成「思考中」；只有说话时才有柱子
         // 文字模式刚唤起、还没字的时候是「正在听」，跟「思考中」同一个样式（同一个视图，只换字）
         let waiting = mode == .listening && t.content != .waveform && (written + pending + partial).isEmpty
-        let now: Showing = message != nil ? .text : mode == .thinking || waiting ? .thinking
+        let now: Showing = learned != nil ? .learned : message != nil ? .text : mode == .thinking || waiting ? .thinking
             : t.content == .waveform ? .wave : .text
         if now != showing, panel.isVisible {
             let fade = CATransition()
@@ -250,10 +310,28 @@ final class HUD {
             fade.duration = 0.15
             content.layer?.add(fade, forKey: "swap")
         }
+        let switchedLook = (now == .learned) != (showing == .learned)
         showing = now
+        if switchedLook { applyGlass() }
+        applyCornerRadius()
         marquee.isHidden = now != .text
         wave.isHidden = now != .wave
         thinking.isHidden = now != .thinking
+        learnedView.isHidden = now != .learned
+        undoButton.isHidden = now != .learned || undone
+        appIcon.isHidden = now == .learned
+        if now == .learned, let learned {
+            thinking.stop()
+            let padX = CGFloat(t.learnedPadX), padY = CGFloat(t.learnedPadY)
+            undoButton.setDark(t.learnedGlass.textDark)
+            let tail = learnedTail
+            learnedView.apply(t, words: learned, maxWidth: Self.maxPillWidth - padX - tail, removed: undone)
+            let size = learnedView.contentSize
+            resize(width: max(CGFloat(t.pillWidth), min(Self.maxPillWidth, padX + size.width + tail)),
+                   height: min(Self.maxPillHeight, max(CGFloat(t.height), size.height + 2 * padY)))
+            applyCornerRadius()   // its cap depends on the height just worked out
+            return
+        }
         if now == .thinking {
             // 「正在听…」只是出字之前的占位，用普通省略号；「思考中」才有跳动的点
             thinking.apply(t, text: waiting ? "Listening" : thinkingWord, hopping: !waiting)
@@ -305,6 +383,7 @@ final class HUD {
     /// 淡的是整个窗口（窗口服务整体合成），玻璃的折射不会穿帮
     private func fadeOut(_ gen: Int) {
         guard gen == hideGen, panel.isVisible else { return }
+        fading = true
         let panel = panel
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.2
@@ -312,8 +391,10 @@ final class HUD {
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             guard let self, gen == self.hideGen else { return }
+            self.fading = false
             panel.orderOut(nil)
             panel.alphaValue = 1
+            panel.ignoresMouseEvents = true
             self.thinking.stop()
         })
     }
@@ -329,19 +410,12 @@ final class HUD {
         // 窗口是一块固定大小的透明画布（按胶囊最宽能到多宽留），胶囊在里面居中、自己变宽变窄——
         // 窗口本身不动，变宽的动画只动玻璃
         let canvasW = (max(Self.maxPillWidth, CGFloat(t.pillWidth)) / 2).rounded(.up) * 2 + 2 * m
-        panel.setContentSize(NSSize(width: canvasW, height: H + 2 * m))
-        container.frame = NSRect(x: 0, y: 0, width: canvasW, height: H + 2 * m)
-
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        shadowLayer.shadowOpacity = Float(t.shadowOpacity)
-        shadowLayer.shadowRadius = CGFloat(t.shadowRadius)
-        shadowLayer.shadowOffset = CGSize(width: 0, height: -CGFloat(t.shadowOffsetY))
-        CATransaction.commit()
+        // Tall enough for the tallest pill too; the pill sits at the bottom and grows upward
+        let canvasH = max(H, Self.maxPillHeight) + 2 * m
+        panel.setContentSize(NSSize(width: canvasW, height: canvasH))
+        container.frame = NSRect(x: 0, y: 0, width: canvasW, height: canvasH)
 
         content.layer?.cornerRadius = r
-        content.layer?.borderWidth = t.edgeHighlight > 0.01 ? 1 : 0
-        content.layer?.borderColor = NSColor.white.withAlphaComponent(t.edgeHighlight).cgColor
 
         let icon = CGFloat(t.iconSize)
         appIcon.frame = NSRect(x: (H - icon) / 2 + 2, y: (H - icon) / 2, width: icon, height: icon)
@@ -349,28 +423,63 @@ final class HUD {
         widthTween = nil
         targetW = CGFloat(t.pillWidth)         // 先回到设置里的宽度；紧跟着的 redraw 会按内容再量一次
         pillW = targetW
+        targetH = H
+        pillH = H
         layoutInner()
         layoutPill()
 
+        applyGlass()
+        place(force: true)
+    }
+
+    /// The pill's glass, or the learned notice's own when it has one
+    private var glassStyle: HUDTuning.GlassStyle { showing == .learned ? tuning.learnedGlass : tuning.pillGlass }
+
+    /// Material, filters, shadow and edge from the current glass style. Runs on every tuning change and
+    /// whenever the pill switches between the learned notice and anything else
+    private func applyGlass() {
+        let t = tuning, s = glassStyle, r = cornerRadius
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        shadowLayer.shadowOpacity = Float(s.shadowOpacity)
+        shadowLayer.shadowRadius = CGFloat(s.shadowRadius)
+        shadowLayer.shadowOffset = CGSize(width: 0, height: -CGFloat(s.shadowOffsetY))
+        CATransaction.commit()
+        content.layer?.borderWidth = s.edgeHighlight > 0.01 ? 1 : 0
+        content.layer?.borderColor = NSColor.white.withAlphaComponent(s.edgeHighlight).cgColor
         if #available(macOS 26, *), let g = glass as? GlassPillView {
-            g.blurRadius = t.blurRadius
-            g.distortAmount = t.distortAmount
-            g.refractAmount = t.refractAmount
-            g.refractHeight = t.refractHeight
-            g.aberration = t.aberration
+            g.blurRadius = s.blurRadius
+            g.distortAmount = s.distortAmount
+            g.refractAmount = s.refractAmount
+            g.refractHeight = s.refractHeight
+            g.aberration = s.aberration
             g.applyPrivateKnobs(lensing: Int(t.lensing), scrim: Int(t.scrim), subdued: Int(t.subdued),
                                 interaction: Int(t.interaction), adaptive: Int(t.adaptive))
-            g.applyMaterial(variant: Int(t.variant), tintOpacity: t.tintOpacity, cornerRadius: r)
-            glassVariant = Int(t.variant) >= 0 ? Int(t.variant) : nil
+            g.applyMaterial(variant: Int(s.variant), tintOpacity: s.tintOpacity, cornerRadius: r)
+            glassVariant = Int(s.variant) >= 0 ? Int(s.variant) : nil
         } else if let e = glass as? NSVisualEffectView {
             e.layer?.cornerRadius = r
         }
-        place(force: true)
     }
 
     private var cornerRadius: CGFloat {
         let H = CGFloat(tuning.height)
+        // The learned notice can have corners of its own (it grows taller than the pill with several words)
+        if showing == .learned, tuning.learnedRadius >= 0 { return min(CGFloat(tuning.learnedRadius), max(H, targetH) / 2) }
         return tuning.capsule ? H / 2 : min(CGFloat(tuning.cornerRadius), H / 2)
+    }
+
+    /// Corners follow what's showing: the learned notice may use its own radius, everything else the pill's
+    private func applyCornerRadius() {
+        let r = cornerRadius
+        guard abs((content.layer?.cornerRadius ?? r) - r) > 0.01 else { return }
+        content.layer?.cornerRadius = r
+        if #available(macOS 26, *), let g = glass as? GlassPillView {
+            g.cornerRadius = r
+        } else if let e = glass as? NSVisualEffectView {
+            e.layer?.cornerRadius = r
+        }
+        layoutPill()
     }
 
     /// 图标右边那块内容区离胶囊左缘 / 右缘的距离
@@ -382,18 +491,25 @@ final class HUD {
     private func setWidth(fitting contentWidth: CGFloat) {
         let base = CGFloat(tuning.pillWidth)
         let need = contentWidth > 0 ? textX + contentWidth + textTrailing : 0
-        let w = max(base, min(max(base, Self.maxPillWidth), ceil(need)))
-        guard abs(w - targetW) > 0.5 else { return }
+        resize(width: max(base, min(max(base, Self.maxPillWidth), ceil(need))), height: CGFloat(tuning.height))
+    }
+
+    private func resize(width: CGFloat, height: CGFloat) {
+        let w = ceil(width), h = ceil(height)
+        guard abs(w - targetW) > 0.5 || abs(h - targetH) > 0.5 else { return }
         targetW = w
+        targetH = h
         layoutInner()
         widthTween?.invalidate()
         widthTween = nil
-        guard panel.isVisible, panel.alphaValue > 0.05 else { pillW = w; layoutPill(); return }
-        let from = pillW, start = CACurrentMediaTime(), duration = 0.3
+        guard panel.isVisible, panel.alphaValue > 0.05 else { pillW = w; pillH = h; layoutPill(); return }
+        let fromW = pillW, fromH = pillH, start = CACurrentMediaTime(), duration = 0.3
         let tween = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] timer in
             guard let self else { timer.invalidate(); return }
             let p = min(1, (CACurrentMediaTime() - start) / duration)
-            self.pillW = from + (w - from) * CGFloat(1 - pow(1 - p, 3))   // ease-out
+            let e = CGFloat(1 - pow(1 - p, 3))   // ease-out
+            self.pillW = fromW + (w - fromW) * e
+            self.pillH = fromH + (h - fromH) * e
             self.layoutPill()
             if p >= 1 { timer.invalidate(); self.widthTween = nil }
         }
@@ -403,7 +519,7 @@ final class HUD {
 
     /// 玻璃 + 投影：按此刻的宽度在画布里居中
     private func layoutPill() {
-        let H = CGFloat(tuning.height), r = cornerRadius
+        let H = pillH.rounded(), r = cornerRadius
         // 宽度取偶数、画布也是偶数宽 → 居中后左缘一定落在整数点上。1x 的外接屏上半个点就是半个像素，
         // 玻璃的采样矩形对不齐像素格，淡出时会在胶囊外面留一圈方框细线（Retina 上看不出来）
         let w = (pillW / 2).rounded() * 2
@@ -415,6 +531,7 @@ final class HUD {
         CATransaction.commit()
         glass?.frame = pill
         content.frame = NSRect(origin: .zero, size: pill.size)
+        hoverWatcher.frame = content.bounds
     }
 
     /// 玻璃里面的东西：按最终宽度排
@@ -426,7 +543,28 @@ final class HUD {
         marquee.frame = NSRect(x: textX, y: floor((H - textH) / 2), width: W - textX - textTrailing, height: textH)
         wave.frame = NSRect(x: textX - 4, y: 9, width: max(0, W - textX - 6), height: max(0, H - 18))
         thinking.frame = marquee.frame
+        // Laid out at the final size, so the glass reveals it while growing (the pill grows upward). The text
+        // centers in what's left of the Undo button, which sits against the right end like the pill's own inset
+        let btnW = undoSpace.0, tail = learnedTail
+        let padX = CGFloat(t.learnedPadX)
+        learnedView.frame = NSRect(x: padX, y: 0, width: max(0, W - padX - tail), height: targetH)
+        let btn = NSSize(width: RingButton.diameter, height: RingButton.diameter)
+        undoButton.frame = NSRect(x: W - (tail - btnW - Self.undoGap) - btnW, y: floor((targetH - btn.height) / 2),
+                                  width: btnW, height: btn.height)
         thinking.needsLayout = true
+    }
+
+    private static let undoGap: CGFloat = 10
+
+    /// Room at the notice's right end: the Undo button's, or plain padding once it's been pressed
+    private var learnedTail: CGFloat { undone ? CGFloat(tuning.learnedPadX) : undoSpace.1 }
+
+    /// Undo's width, and the room it takes at the right end: gap + button + an inset matching the pill's curve
+    private var undoSpace: (CGFloat, CGFloat) {
+        let btn = NSSize(width: RingButton.diameter, height: RingButton.diameter)
+        // Same inset as the pill's own curve: on a one-line notice the circle sits concentric with its round end
+        let inset = max(6, (CGFloat(tuning.height) - btn.height) / 2)
+        return (btn.width, Self.undoGap + btn.width + inset)
     }
 
     private func place(force: Bool) {

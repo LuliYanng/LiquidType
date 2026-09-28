@@ -67,7 +67,11 @@ final class QwenASR: NSObject, URLSessionWebSocketDelegate, ASREngine {
             "format": "pcm",
             "max_sentence_silence": maxSilence,
         ]
-        if !vocabulary.isEmpty { params["vocabulary"] = vocabulary }
+        if !vocabulary.isEmpty {
+            params["vocabulary"] = vocabulary
+            let supers = vocabulary.values.filter { $0 == Config.superWeight }.count
+            Log.write("ASR hotwords: \(vocabulary.count) (\(supers) at weight \(Config.superWeight))")
+        }
         let msg: [String: Any] = [
             "header": ["action": "run-task", "task_id": taskId, "streaming": "duplex"],
             "payload": [

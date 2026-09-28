@@ -26,10 +26,22 @@ if args.count >= 2, args[1] == "--probe-url" {
 }
 
 if args.count >= 2, args[1] == "--preview-hud" {
-    // 只把 HUD 摆出来几秒，用来截图看样式；--seconds N 改停留时长（看波形动起来 5 秒不够），
-    // --wave 不管设置里选的是什么，这次都按波形画；--messages 把所有提示 / 报错挨个摆一遍；--thinking 走一遍松开热键之后的样子：说话 → 思考中 → 淡出
+    // Put the HUD up for a few seconds to screenshot its look. --seconds N changes how long (5 s is too short to
+    // watch the bars move); --wave draws the bars whatever the setting says; --messages shows every notice and
+    // error in turn; --thinking plays what happens after the hotkey is released: talking → thinking → fade out;
+    // --learned plays the learned-hotword notice
     if args.contains("--wave") { HUDTuning.shared.previewAsWaveform() }
     let hud = HUD()
+    if args.contains("--learned") {
+        // Learned-hotword notice: one word, a few, then enough to wrap
+        let rounds = [["Pipecat"], ["Pipecat", "Cartesia", "千问"],
+                      ["Pipecat", "Cartesia", "千问", "LiquidType", "DashScope", "Samantha", "Claude Code"]]
+        for (i, words) in rounds.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4.5 * Double(i)) { hud.showLearned(words) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.5 * Double(rounds.count)) { exit(0) }
+        app.run()
+    }
     hud.showPreview()
     Log.write("HUD preview: glass=\(hud.usesGlass) variant=\(String(describing: hud.glassVariant)) frame=\(hud.debugFrame) mouse=\(NSEvent.mouseLocation)")
     if args.contains("--messages") {

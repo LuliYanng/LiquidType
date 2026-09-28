@@ -137,16 +137,101 @@ final class Config {
     /// 断句静音阈值 ms（服务端默认 1300 太慢）
     var maxSentenceSilence: Int { Int(env("VT_MAX_SILENCE") ?? "") ?? 400 }
 
-    /// 热词（~/.liquidtype.env 的 VT_HOTWORDS）："Samantha:4, Pipecat, 千问:3"——无权重默认 4
+    /// Learn hotwords from the user's own corrections. Off unless turned on: it reads the text field back
+    /// after typing into it and sends the edited passage to the LLM
+    var learnHotwords: Bool {
+        get { d.object(forKey: "learnHotwords") == nil ? env("VT_LEARN_HOTWORDS") == "1" : d.bool(forKey: "learnHotwords") }
+        set { d.set(newValue, forKey: "learnHotwords") }
+    }
+
+    /// Hotwords learned so far or added in the panel, oldest first
+    var learnedHotwords: [String] {
+        get { d.stringArray(forKey: "learnedHotwords") ?? [] }
+        set { d.set(newValue, forKey: "learnedHotwords") }
+    }
+    static let maxLearnedHotwords = 80
+    /// Qwen only really biases toward "super hotwords" (weight 50): in a 2026-09-26 test, 1–5 changed nothing
+    /// while 50 fixed Pipecat and Cartesia and didn't bend similar-sounding words. It takes at most 50 of them
+    static let superWeight = 50, maxSuperHotwords = 50
+
+    /// Learned since the Dictionary row was last opened: the panel highlights them
+    var newHotwords: [String] {
+        get { d.stringArray(forKey: "newHotwords") ?? [] }
+        set { d.set(newValue, forKey: "newHotwords") }
+    }
+
+    func removeLearnedHotword(_ word: String) {
+        learnedHotwords.removeAll { $0 == word }
+        newHotwords.removeAll { $0 == word }
+    }
+
+    /// Words taken back with the notice's Undo ("won't learn X"): learning skips them from then on
+    var rejectedHotwords: [String] {
+        get { d.stringArray(forKey: "rejectedHotwords") ?? [] }
+        set { d.set(newValue, forKey: "rejectedHotwords") }
+    }
+
+    func rejectLearnedHotwords(_ words: [String]) {
+        words.forEach(removeLearnedHotword)
+        let lower = Set(words.map { $0.lowercased() })
+        rejectedHotwords = Array((rejectedHotwords.filter { !lower.contains($0.lowercased()) } + words).suffix(200))
+    }
+
+    /// Adds the words not already in the vocabulary (case-insensitive) and returns those. The oldest
+    /// learned words drop off past the cap; the ones in ~/.liquidtype.env are never touched. Learning
+    /// (`byHand` false) skips words the user undid; adding one by hand clears it from that list
+    func addLearnedHotwords(_ words: [String], byHand: Bool = false) -> [String] {
+        let lower = Set(words.map { $0.lowercased() })
+        if byHand {
+            rejectedHotwords = rejectedHotwords.filter { !lower.contains($0.lowercased()) }
+        }
+        var known = Set(vocabulary.keys.map { $0.lowercased() })
+        if !byHand { known.formUnion(rejectedHotwords.map { $0.lowercased() }) }
+        var added: [String] = []
+        for w in words where !known.contains(w.lowercased()) {
+            known.insert(w.lowercased())
+            added.append(w)
+        }
+        if !added.isEmpty {
+            learnedHotwords = Array((learnedHotwords + added).suffix(Self.maxLearnedHotwords))
+            let kept = Set(learnedHotwords)
+            newHotwords = newHotwords.filter(kept.contains)
+        }
+        return added
+    }
+
+    /// Hotwords in priority order for engines that cap the count (Cartesia): the env file's, then learned newest first
+    var hotwordList: [String] {
+        var seen = Set<String>()
+        return (envHotwords.keys.sorted() + learnedHotwords.reversed()).filter { seen.insert($0).inserted }
+    }
+
+    /// Everything sent to ASR: the env file's words, then learned ones newest first, all at the super weight
+    /// unless the env file says otherwise. Past the cap of super hotwords, the rest drop to weight 5
     var vocabulary: [String: Int] {
+        let env = envHotwords
+        var out: [String: Int] = [:]
+        var supers = 0
+        for (word, weight) in env.sorted(by: { $0.key < $1.key }) + learnedHotwords.reversed().map({ ($0, Self.superWeight) })
+        where out[word] == nil {
+            let isSuper = weight == Self.superWeight && supers < Self.maxSuperHotwords
+            if isSuper { supers += 1 }
+            out[word] = weight == Self.superWeight && !isSuper ? 5 : weight
+        }
+        return out
+    }
+
+    /// Hotwords from VT_HOTWORDS in ~/.liquidtype.env: "Samantha:4, Pipecat, 千问:3". A word without a weight
+    /// gets the super weight; explicit weights are 1–5 or 50
+    var envHotwords: [String: Int] {
         var out: [String: Int] = [:]
         for part in (env("VT_HOTWORDS") ?? "").split(whereSeparator: { $0 == "," || $0 == "，" || $0 == "\n" }) {
             let item = part.trimmingCharacters(in: .whitespaces)
             guard !item.isEmpty else { continue }
             let pieces = item.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
             let word = pieces[0]
-            let weight = pieces.count > 1 ? (Int(pieces[1]) ?? 4) : 4
-            if !word.isEmpty { out[word] = max(1, min(5, weight)) }
+            let weight = pieces.count > 1 ? (Int(pieces[1]) ?? Self.superWeight) : Self.superWeight
+            if !word.isEmpty { out[word] = weight == Self.superWeight ? weight : max(1, min(5, weight)) }
         }
         return out
     }

@@ -75,6 +75,65 @@ final class HUDTuning: ObservableObject {
     /// 满格至少比门限高这么多 dB（说得再响也只按这个量程算）。调小 = 柱子更容易顶到头
     @Published var barRange: Double = 18 { didSet { save() } }
 
+    // —— Learned-hotword notice (its own set, so tuning it leaves the dictation pill alone) ——
+    @Published var learnedWordSize: Double = 15 { didSet { save() } }
+    /// Index into LearnedNoticeView.weights: 0 regular … 3 bold … 4 heavy
+    @Published var learnedWordWeight: Double = 3 { didSet { save() } }
+    /// Weight of everything that isn't a learned word: the one-word sentence and the caption
+    @Published var learnedTextWeight: Double = 0 { didSet { save() } }
+    /// Brightness of the sentence around a single word
+    @Published var learnedTextAlpha: Double = 0.75 { didSet { save() } }
+    @Published var learnedCaptionSize: Double = 12 { didSet { save() } }
+    @Published var learnedCaptionAlpha: Double = 0.7 { didSet { save() } }
+    @Published var learnedSepAlpha: Double = 0.45 { didSet { save() } }
+    /// Several words: space between wrapped lines of words, and between the words and the caption
+    @Published var learnedLineGap: Double = 9 { didSet { save() } }
+    @Published var learnedCaptionGap: Double = 11 { didSet { save() } }
+    @Published var learnedPadX: Double = 22 { didSet { save() } }
+    @Published var learnedPadY: Double = 17 { didSet { save() } }
+    /// -1 = same corners as the pill; otherwise its own radius (capped at half the notice's height)
+    @Published var learnedRadius: Double = -1 { didSet { save() } }
+    /// Off: the notice wears the pill's glass. On: the learned*Glass set below
+    @Published var learnedOwnGlass: Bool = false { didSet { save() } }
+    @Published var learnedVariant: Double = 11 { didSet { save() } }
+    @Published var learnedTintOpacity: Double = 0 { didSet { save() } }
+    @Published var learnedBlurRadius: Double = 0.5 { didSet { save() } }
+    @Published var learnedDistortAmount: Double = 0 { didSet { save() } }
+    @Published var learnedRefractAmount: Double = 73 { didSet { save() } }
+    @Published var learnedRefractHeight: Double = 20 { didSet { save() } }
+    @Published var learnedAberration: Double = 0 { didSet { save() } }
+    @Published var learnedShadowOpacity: Double = 0.21 { didSet { save() } }
+    @Published var learnedShadowRadius: Double = 9 { didSet { save() } }
+    @Published var learnedShadowOffsetY: Double = 9 { didSet { save() } }
+    @Published var learnedEdgeHighlight: Double = 0.10 { didSet { save() } }
+    @Published var learnedTextDark: Bool = false { didSet { save() } }
+    @Published var learnedTextShadow: Double = 0 { didSet { save() } }
+
+    /// The glass-and-text look, one for the pill and one for the learned notice
+    struct GlassStyle {
+        var variant, tintOpacity, blurRadius, distortAmount, refractAmount, refractHeight, aberration: Double
+        var shadowOpacity, shadowRadius, shadowOffsetY, edgeHighlight: Double
+        var textDark: Bool
+        var textShadow: Double
+    }
+
+    var pillGlass: GlassStyle {
+        GlassStyle(variant: variant, tintOpacity: tintOpacity, blurRadius: blurRadius, distortAmount: distortAmount,
+                   refractAmount: refractAmount, refractHeight: refractHeight, aberration: aberration,
+                   shadowOpacity: shadowOpacity, shadowRadius: shadowRadius, shadowOffsetY: shadowOffsetY,
+                   edgeHighlight: edgeHighlight, textDark: textDark, textShadow: textShadow)
+    }
+
+    var learnedGlass: GlassStyle {
+        guard learnedOwnGlass else { return pillGlass }
+        return GlassStyle(variant: learnedVariant, tintOpacity: learnedTintOpacity, blurRadius: learnedBlurRadius,
+                          distortAmount: learnedDistortAmount, refractAmount: learnedRefractAmount,
+                          refractHeight: learnedRefractHeight, aberration: learnedAberration,
+                          shadowOpacity: learnedShadowOpacity, shadowRadius: learnedShadowRadius,
+                          shadowOffsetY: learnedShadowOffsetY, edgeHighlight: learnedEdgeHighlight,
+                          textDark: learnedTextDark, textShadow: learnedTextShadow)
+    }
+
     /// 当前显示方式下胶囊实际多宽
     var pillWidth: Double { content == .waveform ? barPillWidth : width }
 
@@ -99,6 +158,22 @@ final class HUDTuning: ObservableObject {
         barWidth = dbl("barWidth", barWidth); barGap = dbl("barGap", barGap)
         barSpeed = dbl("barSpeed", barSpeed); barFloor = dbl("barFloor", barFloor)
         barRange = dbl("barRange", barRange)
+        learnedWordSize = dbl("learnedWordSize", learnedWordSize); learnedWordWeight = dbl("learnedWordWeight", learnedWordWeight)
+        learnedTextWeight = dbl("learnedTextWeight", learnedTextWeight); learnedTextAlpha = dbl("learnedTextAlpha", learnedTextAlpha)
+        learnedCaptionSize = dbl("learnedCaptionSize", learnedCaptionSize); learnedCaptionAlpha = dbl("learnedCaptionAlpha", learnedCaptionAlpha)
+        learnedSepAlpha = dbl("learnedSepAlpha", learnedSepAlpha); learnedLineGap = dbl("learnedLineGap", learnedLineGap)
+        learnedCaptionGap = dbl("learnedCaptionGap", learnedCaptionGap); learnedPadX = dbl("learnedPadX", learnedPadX)
+        learnedPadY = dbl("learnedPadY", learnedPadY); learnedRadius = dbl("learnedRadius", learnedRadius)
+        learnedOwnGlass = bol("learnedOwnGlass", learnedOwnGlass); learnedVariant = dbl("learnedVariant", learnedVariant)
+        learnedTintOpacity = dbl("learnedTintOpacity", learnedTintOpacity); learnedBlurRadius = dbl("learnedBlurRadius", learnedBlurRadius)
+        learnedDistortAmount = dbl("learnedDistortAmount", learnedDistortAmount)
+        learnedRefractAmount = dbl("learnedRefractAmount", learnedRefractAmount)
+        learnedRefractHeight = dbl("learnedRefractHeight", learnedRefractHeight); learnedAberration = dbl("learnedAberration", learnedAberration)
+        learnedShadowOpacity = dbl("learnedShadowOpacity", learnedShadowOpacity)
+        learnedShadowRadius = dbl("learnedShadowRadius", learnedShadowRadius)
+        learnedShadowOffsetY = dbl("learnedShadowOffsetY", learnedShadowOffsetY)
+        learnedEdgeHighlight = dbl("learnedEdgeHighlight", learnedEdgeHighlight)
+        learnedTextDark = bol("learnedTextDark", learnedTextDark); learnedTextShadow = dbl("learnedTextShadow", learnedTextShadow)
         loading = false
     }
 
@@ -113,6 +188,16 @@ final class HUDTuning: ObservableObject {
             "textDark": textDark, "pendingAlpha": pendingAlpha, "partialAlpha": partialAlpha, "textShadow": textShadow,
             "barPillWidth": barPillWidth, "barCount": barCount, "barWidth": barWidth,
             "barGap": barGap, "barSpeed": barSpeed, "barFloor": barFloor, "barRange": barRange,
+            "learnedWordSize": learnedWordSize, "learnedWordWeight": learnedWordWeight, "learnedTextWeight": learnedTextWeight,
+            "learnedTextAlpha": learnedTextAlpha, "learnedCaptionSize": learnedCaptionSize, "learnedCaptionAlpha": learnedCaptionAlpha,
+            "learnedSepAlpha": learnedSepAlpha, "learnedLineGap": learnedLineGap, "learnedCaptionGap": learnedCaptionGap,
+            "learnedPadX": learnedPadX, "learnedPadY": learnedPadY, "learnedRadius": learnedRadius,
+            "learnedOwnGlass": learnedOwnGlass, "learnedVariant": learnedVariant, "learnedTintOpacity": learnedTintOpacity,
+            "learnedBlurRadius": learnedBlurRadius, "learnedDistortAmount": learnedDistortAmount,
+            "learnedRefractAmount": learnedRefractAmount, "learnedRefractHeight": learnedRefractHeight,
+            "learnedAberration": learnedAberration, "learnedShadowOpacity": learnedShadowOpacity,
+            "learnedShadowRadius": learnedShadowRadius, "learnedShadowOffsetY": learnedShadowOffsetY,
+            "learnedEdgeHighlight": learnedEdgeHighlight, "learnedTextDark": learnedTextDark, "learnedTextShadow": learnedTextShadow,
         ]
     }
 

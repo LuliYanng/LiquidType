@@ -20,6 +20,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.write("LiquidType \(AppVersion.summary) launched (log: \(Log.path))")
         DashScope.resolve { _ in }   // key 在哪个地域，启动时就认好，第一次按键不用等
         setupStatusItem()
+        HotwordLearner.shared.onLearned = { [weak self] words in
+            guard let self else { return }
+            // Learned while the next dictation is going (that's what ended the watch): show it once that's over
+            self.pendingLearned += words
+            self.showPendingLearned()
+        }
+        hud.onUndoLearned = { words in
+            Config.shared.rejectLearnedHotwords(words)
+            Log.write("Dictionary: undid \(words) from the notice, won't learn them again")
+        }
         AudioCapture.requestPermission { ok in
             Log.write("Mic permission: \(ok)")
             if !ok { self.flash(.error, HUDCopy.micDenied, 4) }
@@ -61,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 退出时兜底：别把用户的外放留在静音状态
     func applicationWillTerminate(_ notification: Notification) {
         SystemAudio.restore()
+        HotwordLearner.shared.restoreWebAccessibility()
     }
 
     private func flash(_ mode: HUD.Mode, _ message: String, _ seconds: TimeInterval) {
@@ -118,6 +129,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func beginListening() {
         guard state == .idle else { return }
+        // Whatever the last dictation turned into by now is final: the next one may type into the same field
+        HotwordLearner.shared.stop(reason: "next dictation")
         let model = ASRModel.find(Config.shared.asrChoice)
         guard let client = ASRModel.makeEngine(model) else {
             flash(.error, HUDCopy.noAPIKey, 3)
@@ -138,6 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appName = web.site.label
         }
         hud.setContext(app: target, style: style, icon: icon)
+        HotwordLearner.shared.prepare(for: target)
 
         let sess = StreamSession(target: target, style: style, appName: appName, polish: cfg.polishEnabled, usePaste: cfg.usePaste)
         sess.onProgress = { [weak self, weak sess] written, pending in
@@ -203,6 +217,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.write("Cancel (\(reason)) written=[\(session?.written ?? "")]")
         teardown()
         hud.hide()
+        showPendingLearned()
+    }
+
+    /// Words learned since the last notice, waiting for the pill to be free
+    private var pendingLearned: [String] = []
+
+    private func showPendingLearned() {
+        guard state == .idle, !pendingLearned.isEmpty else { return }
+        let words = pendingLearned
+        pendingLearned = []
+        hud.showLearned(words, undoable: true)
     }
 
     private func endListening() {
@@ -241,9 +266,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func finishSession(written: String) {
         Log.write("Done \(Int(Date().timeIntervalSince(releasedAt) * 1000))ms after release [\(written)]")
+        HotwordLearner.shared.track(inserted: written, in: session?.target)
         teardown()
         // 字已经落进 app 里了，胶囊不再重复一遍，直接从「思考中」淡出
         hud.hide()
+        showPendingLearned()
     }
 
     private func teardown() {

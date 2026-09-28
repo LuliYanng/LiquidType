@@ -38,7 +38,7 @@ struct ASRModel: Equatable {
         guard !model.keyMissing else { return nil }
         let cfg = Config.shared
         if model.id == "cartesia" {
-            return CartesiaASR(apiKey: cfg.cartesiaKey, keyterms: cfg.vocabulary.keys.sorted())
+            return CartesiaASR(apiKey: cfg.cartesiaKey, keyterms: cfg.hotwordList)
         }
         return QwenASR(apiKey: cfg.apiKey, model: cfg.asrModel, vocabulary: cfg.vocabulary, maxSilence: cfg.maxSentenceSilence)
     }
