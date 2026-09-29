@@ -72,7 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 退出时兜底：别把用户的外放留在静音状态
     func applicationWillTerminate(_ notification: Notification) {
         SystemAudio.restore()
-        HotwordLearner.shared.restoreWebAccessibility()
+        AssistiveMode.shared.restore()
     }
 
     private func flash(_ mode: HUD.Mode, _ message: String, _ seconds: TimeInterval) {
@@ -155,7 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appName = web.site.label
         }
         hud.setContext(app: target, style: style, icon: icon)
-        HotwordLearner.shared.prepare(for: target)
+        AssistiveMode.shared.enable(for: target)
 
         let sess = StreamSession(target: target, style: style, appName: appName, polish: cfg.polishEnabled, usePaste: cfg.usePaste)
         sess.onProgress = { [weak self, weak sess] written, pending in

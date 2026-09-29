@@ -79,8 +79,26 @@ final class StreamSession {
             onAbort?(HUDCopy.switchedApps, text)
             return
         }
-        // 多行文本一律走 ⌘V：逐字打字时换行会变成回车，在聊天类输入框里等于直接发送
-        if usePaste || text.contains("\n") { TextInjector.paste(text) } else { TextInjector.type(text) }
+        // Where the keyboard focus is decides how the text goes in, the same rule in every app:
+        // - a text box: type it
+        // - clearly not a text box (Claude with the focus off its text box, a web page): typing would go nowhere
+        //   or set off shortcuts, so copy it and say "press ⌘V"
+        // - can't be told (WeChat draws its own; Claude's second conversation reports no focus at all): paste it
+        //   and leave it on the clipboard. A paste lands whole or not at all, where keystrokes an app catches
+        //   itself can come out as a few stray characters, even in another conversation's text box
+        switch TextInjector.focus(in: target) {
+        case .other(let role):
+            Log.write("Focus: \(role), not a text box: copied instead of typing")
+            aborted = true
+            onAbort?(HUDCopy.cantType, text)
+            return
+        case .unknown(let what):
+            Log.write("Focus: can't tell (\(what)), pasting and leaving it on the clipboard")
+            TextInjector.paste(text, keep: true)
+        case .text:
+            // 多行文本一律走 ⌘V：逐字打字时换行会变成回车，在聊天类输入框里等于直接发送
+            if usePaste || text.contains("\n") { TextInjector.paste(text) } else { TextInjector.type(text) }
+        }
         written = text
         onProgress?(written, "")
         onDone?(written)

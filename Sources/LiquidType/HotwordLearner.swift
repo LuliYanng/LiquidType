@@ -43,8 +43,6 @@ final class HotwordLearner {
     private var watch: Watch?
     private var timer: Timer?
     private var pending: DispatchWorkItem?
-    /// Apps whose assistive switch was flipped for learning, and which one, to flip back when learning goes off
-    private var manualAXEnabled: [pid_t: String] = [:]
 
     private static let contextLength = 24
     private static let maxFieldLength = 20_000
@@ -52,15 +50,6 @@ final class HotwordLearner {
     private static let settleAfter: TimeInterval = 6   // no caret to go by; longest pause between edits in early use: 5 s
     private static let idleFallback: TimeInterval = 15 // caret readable but it never left the passage
     private static let pollInterval: TimeInterval = 0.5   // edit-then-Enter in a chat box can be quick
-
-    /// When a dictation into `app` starts. A Chromium / Electron app only starts building its accessibility
-    /// tree once asked, and that takes a moment: asking now means it's ready by the time the text goes in
-    func prepare(for app: NSRunningApplication?) {
-        guard Config.shared.learnHotwords, let app else { return }
-        let appEl = AXUIElementCreateApplication(app.processIdentifier)
-        AXUIElementSetMessagingTimeout(appEl, 0.3)
-        enableWebAccessibility(appEl, app: app)
-    }
 
     /// Right after `inserted` was typed into `app`. Starts a new watch (ending any previous one)
     func track(inserted: String, in app: NSRunningApplication?) {
@@ -85,8 +74,8 @@ final class HotwordLearner {
         evaluate(inserted: w.inserted, final: w.core)
     }
 
-    /// Learning was switched off: drop the current watch without sending anything, and hand the apps
-    /// whose assistive mode was switched on for it back the way they were
+    /// Learning was switched off: drop the current watch without sending anything. Assistive mode stays:
+    /// typing reads the focus with it too (see AssistiveMode)
     func turnedOff() {
         pending?.cancel()
         pending = nil
@@ -94,7 +83,6 @@ final class HotwordLearner {
         timer = nil
         if watch != nil { Log.write("Learn: switched off, dropped the current watch") }
         watch = nil
-        restoreWebAccessibility()
     }
 
     // MARK: - Watching
@@ -120,7 +108,7 @@ final class HotwordLearner {
         }
         let appEl = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetMessagingTimeout(appEl, 0.3)
-        enableWebAccessibility(appEl, app: app)
+        AssistiveMode.shared.enable(for: app)
 
         guard let el: AXUIElement = Self.attribute(appEl, kAXFocusedUIElementAttribute) else {
             retry("no focused element"); return
@@ -151,8 +139,11 @@ final class HotwordLearner {
             if loc == NSNotFound { loc = ns.range(of: inserted, options: [.backwards, .literal]).location }
         }
         guard loc != NSNotFound else {
-            // Lengths only: the rest of the field is the user's own text, not something they dictated
-            retry("typed text not in field (role=\(role), \(ns.length) chars, caret \(caret))"); return
+            // Lengths only: the rest of the field is the user's own text, not something they dictated. A field
+            // shorter than the text is what's left of the typing itself (keystrokes lost on the way), shown in full
+            let debris = ns.length < len ? " [\(value)]" : ""
+            let since = AssistiveMode.shared.since(app.processIdentifier).map { ", assistive mode on for \(Int(Date().timeIntervalSince($0)))s" } ?? ""
+            retry("typed text not in field (role=\(role), \(ns.length) chars\(debris), caret \(caret)\(since))"); return
         }
         let c = Self.contextLength
         // Anchors snap to whole characters, so an emoji at the cut doesn't break them
@@ -425,48 +416,6 @@ final class HotwordLearner {
     """
 
     // MARK: - AX helpers
-
-    /// Chromium and Electron apps only build their accessibility tree for assistive apps. Electron takes
-    /// AXManualAccessibility; Chrome itself doesn't, and needs AXEnhancedUserInterface, the switch screen
-    /// readers flip (it reports an error but works: the focused field showed up about 3 s later, 2026-09-26).
-    /// That one puts the whole browser in assistive mode, so it's only used on Chromium browsers.
-    /// Other apps just return an error, which is fine
-    private func enableWebAccessibility(_ appEl: AXUIElement, app: NSRunningApplication) {
-        let pid = app.processIdentifier
-        guard manualAXEnabled[pid] == nil else { return }
-        manualAXEnabled[pid] = ""
-        let name = "\(app.localizedName ?? "?") [\(app.bundleIdentifier ?? "")]"
-        // Already on (a screen reader, another tool): leave it, and leave it on when learning goes off
-        if Self.isOn(appEl, "AXManualAccessibility") || Self.isOn(appEl, "AXEnhancedUserInterface") {
-            Log.write("Learn: assistive mode already on for \(name)")
-            return
-        }
-        let err = AXUIElementSetAttributeValue(appEl, "AXManualAccessibility" as CFString, kCFBooleanTrue)
-        if err == .success {
-            manualAXEnabled[pid] = "AXManualAccessibility"
-            Log.write("Learn: AXManualAccessibility on for \(name)")
-        } else if WebContext.isBrowser(app), !["com.apple.safari", "org.mozilla.firefox"].contains(app.bundleIdentifier?.lowercased() ?? "") {
-            let e = AXUIElementSetAttributeValue(appEl, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
-            manualAXEnabled[pid] = "AXEnhancedUserInterface"
-            Log.write("Learn: AXEnhancedUserInterface on for \(name) (returned \(e.rawValue))")
-        }
-    }
-
-    private static func isOn(_ appEl: AXUIElement, _ attribute: String) -> Bool {
-        (Self.attribute(appEl, attribute) as NSNumber?)?.boolValue ?? false
-    }
-
-    /// Flip those switches back (learning off, or quitting): assistive mode costs the app some speed, and
-    /// AXEnhancedUserInterface is known to upset window managers moving Chrome's windows
-    func restoreWebAccessibility() {
-        for (pid, attribute) in manualAXEnabled where !attribute.isEmpty {
-            let appEl = AXUIElementCreateApplication(pid)
-            AXUIElementSetMessagingTimeout(appEl, 0.3)
-            AXUIElementSetAttributeValue(appEl, attribute as CFString, kCFBooleanFalse)
-        }
-        if !manualAXEnabled.isEmpty { Log.write("Learn: switched assistive mode back off in \(manualAXEnabled.count) app(s)") }
-        manualAXEnabled.removeAll()
-    }
 
     private static func attribute<T>(_ el: AXUIElement, _ name: String) -> T? {
         var v: CFTypeRef?
