@@ -594,14 +594,18 @@ final class MenuPanelController: NSObject, NSWindowDelegate {
         return p
     }
 
-    /// 画布顶边贴着菜单栏图标底下，左右不出屏幕
+    /// The canvas hangs from just under the menu bar icon, stays on screen sideways, and reaches down to the
+    /// bottom of the screen's usable area: a fixed height cut the panel off at both ends once it grew past it
+    /// (Dictionary open, ⌥ rows). It's transparent, so the extra height costs nothing and clicks pass through
     private func layout() {
         guard let p = panel else { return }
-        let size = MenuPanelView.canvas
+        var size = MenuPanelView.canvas
         var origin = p.frame.origin
         if let b = anchor?.window?.frame {
+            let screen = anchor?.window?.screen?.visibleFrame
+            if let screen { size.height = max(size.height, floor(b.minY - screen.minY)) }
             origin = NSPoint(x: b.midX - size.width / 2, y: b.minY - size.height)
-            if let screen = anchor?.window?.screen?.visibleFrame {
+            if let screen {
                 let m = MenuPanelView.margin - 8
                 origin.x = min(max(origin.x, screen.minX - m), screen.maxX - size.width + m)
             }
