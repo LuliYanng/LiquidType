@@ -17,6 +17,11 @@ final class StreamSession {
     private var rawSentences: [String] = []
     private var aborted = false
     private(set) var written = ""
+    /// Text copied while dictating (see Clip). The transcript holds their placeholders
+    private(set) var clips: [Clip] = []
+    /// Copied while a sentence was still being heard: the placeholder goes into that sentence once it's final
+    private var waiting: [(token: String, offset: Int)] = []
+    private var broughtBack = false
 
     init(target: NSRunningApplication?, style: AppStyle, appName: String?, polish: Bool, usePaste: Bool) {
         self.target = target
@@ -28,16 +33,33 @@ final class StreamSession {
 
     var pendingRaw: String { rawSentences.joined() }
     var rawText: String { rawSentences.joined() }
+    /// The pill's view: each placeholder as its clip's label, the waiting ones inside the sentence being heard
+    var pendingShown: String { Clip.labeled(pendingRaw, with: clips) }
+    func partialShown(_ partial: String) -> String { Clip.labeled(Clip.insert(waiting, into: partial), with: clips) }
 
     func addSentence(_ raw: String) {
         guard !aborted else { return }
-        rawSentences.append(raw)
-        onProgress?(written, pendingRaw)
+        rawSentences.append(Clip.insert(waiting, into: raw))
+        waiting = []
+        onProgress?(written, pendingShown)
+    }
+
+    /// Copied while dictating, with `partial` heard of the current sentence so far. In a pause (the usual case:
+    /// talking stops while you go and copy) it goes between sentences
+    func addClip(_ text: String, partial: String) {
+        guard !aborted, text != clips.last?.text else { return }
+        let clip = Clip(text: text, number: clips.count + 1)
+        clips.append(clip)
+        if partial.isEmpty { rawSentences.append(clip.token) } else { waiting.append((clip.token, partial.count)) }
+        Log.write("Clip \(clip.token): \(text.count) chars, \(partial.count) into the sentence being heard")
+        onProgress?(written, pendingShown)
     }
 
     /// 松键、尾句已补齐：整段润色一次，再写入
     func finishInput() {
         guard !aborted else { return }
+        rawSentences += waiting.map { $0.token }   // the sentence they were waiting for never came
+        waiting = []
         let raw = rawSentences.joined()
         guard !raw.isEmpty else { onDone?(""); return }
         if polish {
@@ -46,7 +68,8 @@ final class StreamSession {
             // A losing polish still runs to completion and is logged, for recalibrating the threshold.
             var settled = false
             let t0 = Date()
-            if JevGate.enabled && style.fastPath {
+            // Placeholders are for the cleanup model to place, so a dictation with clips always goes through it
+            if JevGate.enabled && style.fastPath && clips.isEmpty {
                 let threshold = Config.shared.jevThreshold
                 JevGate.check(raw) { [weak self] score in
                     let ms = Int(Date().timeIntervalSince(t0) * 1000)
@@ -73,8 +96,27 @@ final class StreamSession {
     func abort() { aborted = true }
 
     private func inject(_ text: String) {
+        deliver(Clip.fill(text, with: clips))
+    }
+
+    private func deliver(_ text: String) {
         if let target, let front = NSWorkspace.shared.frontmostApplication,
            target.processIdentifier != front.processIdentifier {
+            // Still off in another app where something was copied for this dictation: go back to the app it
+            // started in, which keeps its own focus, and type there
+            if !clips.isEmpty && !broughtBack {
+                broughtBack = true
+                Log.write("Back to \(target.localizedName ?? "?") from \(front.localizedName ?? "?") to type the clips in")
+                let app = AXUIElementCreateApplication(target.processIdentifier)
+                if AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue) != .success {
+                    target.activate(options: [])
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                    guard let self, !self.aborted else { return }
+                    self.deliver(text)
+                }
+                return
+            }
             aborted = true
             onAbort?(HUDCopy.switchedApps, text)
             return

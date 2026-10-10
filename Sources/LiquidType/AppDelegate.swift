@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pressedAt = Date()
     private var releasedAt = Date()
     private let menuPanel = MenuPanelController()
+    private let clipboard = ClipboardWatch()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.write("LiquidType \(AppVersion.summary) launched (log: \(Log.path))")
@@ -159,8 +160,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let sess = StreamSession(target: target, style: style, appName: appName, polish: cfg.polishEnabled, usePaste: cfg.usePaste)
         sess.onProgress = { [weak self, weak sess] written, pending in
-            guard let self, self.session === sess, self.state != .idle else { return }
-            self.hud.show(self.state == .listening ? .listening : .thinking, written: written, pending: pending, partial: self.partial)
+            guard let self, let sess, self.session === sess, self.state != .idle else { return }
+            self.hud.show(self.state == .listening ? .listening : .thinking, written: written, pending: pending,
+                          partial: sess.partialShown(self.partial))
         }
         sess.onDone = { [weak self, weak sess] written in
             guard let self, self.session === sess else { return }
@@ -178,7 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         client.onPartial = { [weak self, weak client] text in
             guard let self, self.asr === client, self.state == .listening, let s = self.session else { return }
             self.partial = text
-            self.hud.show(.listening, written: s.written, pending: s.pendingRaw, partial: text)
+            self.hud.show(.listening, written: s.written, pending: s.pendingShown, partial: s.partialShown(text))
         }
         client.onSentence = { [weak self, weak client] text in
             guard let self, self.asr === client, self.state != .idle else { return }
@@ -192,6 +194,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         asr = client
         client.connect()
+        // Copied while talking: goes into the text where it was copied
+        clipboard.start { [weak self, weak sess] text in
+            guard let self, let sess, self.session === sess, self.state == .listening else { return }
+            sess.addClip(text, partial: self.partial)
+        }
         // 先掐掉外放再开麦：正在放的视频/音乐不会被自己的麦克风收回去
         if cfg.muteWhileListening { SystemAudio.muteIfPlaying() }
         audio.start(
@@ -238,6 +245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard state == .listening, let client = asr, let sess = session else { return }
         state = .finishing
         releasedAt = Date()
+        clipboard.stop()
         audio.stop()
         SystemAudio.restore()
         // 到现在一个字都没识别出来的话先不动：多半是「没听到内容」，别中间硬插一下「思考中」。
@@ -279,6 +287,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func teardown() {
         state = .idle
+        clipboard.stop()
         audio.stop()
         SystemAudio.restore()
         asr?.cancel()
