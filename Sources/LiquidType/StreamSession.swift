@@ -58,8 +58,6 @@ final class StreamSession {
     /// 松键、尾句已补齐：整段润色一次，再写入
     func finishInput() {
         guard !aborted else { return }
-        rawSentences += waiting.map { $0.token }   // the sentence they were waiting for never came
-        waiting = []
         let raw = rawSentences.joined()
         guard !raw.isEmpty else { onDone?(""); return }
         if polish {
@@ -108,9 +106,7 @@ final class StreamSession {
                 broughtBack = true
                 Log.write("Back to \(target.localizedName ?? "?") from \(front.localizedName ?? "?") to type the clips in")
                 let app = AXUIElementCreateApplication(target.processIdentifier)
-                if AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue) != .success {
-                    target.activate(options: [])
-                }
+                AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                     guard let self, !self.aborted else { return }
                     self.deliver(text)

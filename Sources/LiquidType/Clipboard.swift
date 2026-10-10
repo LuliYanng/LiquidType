@@ -24,39 +24,22 @@ struct Clip {
         return "📋 " + (line.count > 10 ? String(line.prefix(10)) + "…" : line)
     }
 
-    /// Its content where its placeholder was, with a space or a line break where it would run into what's
-    /// around it. A link always gets a space after: an app making it clickable takes in the next character too
+    /// Its content where its placeholder was: on lines of its own if it has several, and a link with a space
+    /// after, or an app making it clickable takes in the next character too
     func placed(after prev: Character?, before next: Character?) -> String {
         if text.contains(where: \.isNewline) {
             return ((prev?.isNewline ?? true) ? "" : "\n") + text + ((next?.isNewline ?? true) ? "" : "\n")
         }
-        let lead = prev.map { isLink ? $0.isLetter || $0.isNumber : Self.runTogether($0, text.first) } ?? false
-        let trail = next.map { isLink ? !$0.isWhitespace : Self.runTogether(text.last, $0) } ?? false
-        return (lead ? " " : "") + text + (trail ? " " : "")
+        return isLink && next.map({ !$0.isWhitespace }) == true ? text + " " : text
     }
 
-    /// Two Latin letters or digits side by side read as one word
-    private static func runTogether(_ a: Character?, _ b: Character?) -> Bool {
-        guard let a, let b else { return false }
-        return a.isASCII && b.isASCII && (a.isLetter || a.isNumber) && (b.isLetter || b.isNumber)
-    }
-
-    /// `text` with each clip's content where its placeholder is. Whatever the cleanup did, every clip is typed
-    /// exactly once: one it lost goes at the end, a repeat or a placeholder it garbled goes away
+    /// `text` with each clip's content where its placeholder is
     static func fill(_ text: String, with clips: [Clip]) -> String {
-        guard !clips.isEmpty else { return text }
-        var out = "", rest = Substring(text), used = Set<Int>()
-        while let r = rest.range(of: "⟦[^⟦⟧]{1,12}⟧", options: .regularExpression) {
-            out += rest[..<r.lowerBound]
-            let token = rest[r]
-            rest = rest[r.upperBound...]
-            if let clip = clips.first(where: { $0.token == token }), used.insert(clip.number).inserted {
-                out += clip.placed(after: out.last, before: rest.first)
-            }
-        }
-        out += rest
-        for clip in clips where !used.contains(clip.number) {
-            out += clip.placed(after: out.last, before: nil)
+        var out = text
+        for clip in clips {
+            guard let r = out.range(of: clip.token) else { continue }
+            let content = clip.placed(after: out[..<r.lowerBound].last, before: out[r.upperBound...].first)
+            out.replaceSubrange(r, with: content)
         }
         return out
     }
@@ -66,24 +49,14 @@ struct Clip {
         clips.reduce(text) { $0.replacingOccurrences(of: $1.token, with: " \($1.label) ") }
     }
 
-    /// Puts placeholders into a sentence, each `offset` characters in (as much of the sentence as had been
-    /// heard when it was copied), moved on to the end of a Latin word rather than splitting it
+    /// Puts placeholders into a sentence, each `offset` characters in: as much of the sentence as had been
+    /// heard when it was copied
     static func insert(_ marks: [(token: String, offset: Int)], into sentence: String) -> String {
-        guard !marks.isEmpty else { return sentence }
-        let chars = Array(sentence)
-        var at: [(pos: Int, order: Int, token: String)] = []
-        for (i, m) in marks.enumerated() {
-            var pos = min(m.offset, chars.count)
-            while pos > 0, pos < chars.count, runTogether(chars[pos - 1], chars[pos]) { pos += 1 }
-            at.append((pos, i, m.token))
+        var out = sentence
+        for m in marks.reversed() {
+            out.insert(contentsOf: m.token, at: out.index(out.startIndex, offsetBy: min(m.offset, out.count)))
         }
-        at.sort { ($0.pos, $0.order) < ($1.pos, $1.order) }
-        var out = "", from = 0
-        for a in at {
-            out += String(chars[from..<a.pos]) + a.token
-            from = a.pos
-        }
-        return out + String(chars[from...])
+        return out
     }
 }
 
