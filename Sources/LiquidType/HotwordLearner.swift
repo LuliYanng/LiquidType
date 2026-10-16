@@ -336,7 +336,8 @@ final class HotwordLearner {
         let user = "<before>\n\(a)\n</before>\n<after>\n\(b)\n</after>"
         Polisher.request(system: Self.prompt, user: user, fallback: "", timeout: 15, label: "Learn") { [weak self] text, ok in
             guard ok else { return }
-            let found = Self.parse(text)
+            // A Chinese fix of one or two characters comes back as just those characters: grow it to the whole name or word
+            let found = Self.parse(text).map { CJKWord.whole($0, in: b) }
             // Only a spelling the user typed over something else (not text they merely added), and one that wasn't there already
             let words = found.filter { $0.count <= 40 && !a.contains($0) && Self.typedOver($0, from: a, to: b) }
             if words.count < found.count { Log.write("Learn: dropped \(found.filter { !words.contains($0) }) (added, not corrected)") }
